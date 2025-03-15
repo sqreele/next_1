@@ -25,6 +25,9 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - NODE_ENV=production
+      - DATABASE_URL=postgresql://mylubd_user:Sqreele1234@db:5432/mylubd_db
+    volumes:
+      - ./frontend/Lastnext/prisma:/app/prisma
     healthcheck:
       test: ["CMD", "wget", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
@@ -44,7 +47,7 @@ services:
     container_name: django-backend
     restart: unless-stopped
     volumes:
-      - ./backend/myLubd/src:/app/src:ro
+      - ./backend/myLubd/src:/app/src
       - static_volume:/app/static
       - media_volume:/app/media
     environment:
@@ -60,11 +63,12 @@ services:
       - SQL_ENGINE=django.db.backends.postgresql
       - SQL_DATABASE=${POSTGRES_DB:-mylubd_db}
       - SQL_USER=${POSTGRES_USER:-mylubd_user}
-      - SQL_PASSWORD=${POSTGRES_PASSWORD:-Sqreele1234#}
+      - SQL_PASSWORD=${POSTGRES_PASSWORD:-Sqreele1234}
       - SQL_HOST=db
       - SQL_PORT=5432
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-mylubd_user}:${POSTGRES_PASSWORD:-Sqreele1234}@db:5432/${POSTGRES_DB:-mylubd_db}?schema=public
     healthcheck:
       test: ["CMD", "python", "-c", "import http.client; conn = http.client.HTTPConnection('localhost:8000'); conn.request('GET', '/health/'); response = conn.getresponse(); exit(0 if response.status == 200 else 1)"]
       interval: 30s
@@ -79,21 +83,23 @@ services:
 
   db:
     image: postgres:13-alpine
-    container_name: postgres-db
+    container_name: db
     restart: unless-stopped
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-mylubd_db}
       - POSTGRES_USER=${POSTGRES_USER:-mylubd_user}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-Sqreele1234#}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-Sqreele1234}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mylubd_user} -d ${POSTGRES_DB:-mylubd_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    ports:
+      - "5432:5432"  # This exposes the port to the host machine
     expose:
-      - "5432"
+      - "5432" 
     networks:
       - app-network
 

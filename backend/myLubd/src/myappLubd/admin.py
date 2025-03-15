@@ -1,92 +1,101 @@
+# admin.py
 from django.contrib import admin
-from .models import Room, Topic, JobImage, Job, Property, UserProfile
 from django.utils.html import format_html
+from .models import Property, Room, Topic, Job, JobImage, UserProfile
 
-@admin.register(JobImage)
-class JobImageAdmin(admin.ModelAdmin):
-    list_display = ('image_preview', 'get_image_url', 'get_uploaded_by', 'get_uploaded_at')
-    list_filter = (('uploaded_at', admin.DateFieldListFilter),)
-    readonly_fields = ('get_uploaded_at', 'image_preview')
-    
+class JobImageInline(admin.TabularInline):
+    model = JobImage
+    readonly_fields = ['image_preview', 'uploaded_by', 'uploaded_at']
+    extra = 0
+
     def image_preview(self, obj):
-        # Assuming your field is named 'image' in your model
         if obj.image:
-            return format_html(
-                '<img src="{}" width="50" height="50" style="object-fit: cover;" />',
-                obj.image.url
-            )
+            return format_html('<img src="{}" width="100" />', obj.image.url)
         return "No Image"
+    
     image_preview.short_description = 'Preview'
-    
-    def get_image_url(self, obj):
-        if obj.image:
-            return obj.image.url
-        return "-"
-    get_image_url.short_description = 'Image URL'
-    
-    def get_uploaded_by(self, obj):
-        return obj.uploaded_by
-    get_uploaded_by.short_description = 'Uploaded By'
-    
-    def get_uploaded_at(self, obj):
-        return obj.uploaded_at
-    get_uploaded_at.short_description = 'Upload Date'
-    
-class UserFilter(admin.SimpleListFilter):
-    title = 'User'
-    parameter_name = 'user_id'
-
-    def lookups(self, request, model_admin):
-        users = set([job.user for job in model_admin.model.objects.all()])
-        return [(user.id, user.username) for user in users]
-
-    def queryset(self, request, queryset):
-        if self.value():
-            return queryset.filter(user__id=self.value())
-        return queryset
-    
-@admin.register(Room)
-class RoomAdmin(admin.ModelAdmin):
-    list_display = ('name', 'room_type', 'is_active', 'created_at')
-    list_filter = ('room_type', 'is_active', 'properties')
-    search_fields = ['name']
-    
-    def get_properties(self, obj):
-        # Get first 3 properties and add '...' if there are more
-        properties = obj.properties.all()[:3]
-        property_list = [p.name for p in properties]
-        if obj.properties.count() > 3:
-            property_list.append('...')
-        return ", ".join(property_list)
-    get_properties.short_description = 'Properties'
-
-@admin.register(Topic)
-class TopicAdmin(admin.ModelAdmin):
-    list_display = ('title', 'description', 'id')
-    search_fields = ['title']
 
 @admin.register(Job)
 class JobAdmin(admin.ModelAdmin):
-    list_display = ('job_id', 'user', 'status', 'priority', 'remarks', 'created_at', 'completed_at')
-    list_filter = ('status', 'priority', 'created_at', UserFilter)  # Using the custom UserFilter
-    search_fields = ('job_id', 'description')
+    list_display = ['job_id', 'get_topics', 'status', 'priority', 
+                   'user', 'updated_by', 'created_at', 'updated_at']
+    list_filter = ['status', 'priority', 'is_defective', 'created_at', 'updated_at']
+    search_fields = ['job_id', 'description', 'user__username', 'updated_by__username']
+    readonly_fields = ['job_id', 'created_at', 'updated_at', 'completed_at']
+    filter_horizontal = ['rooms', 'topics']
+    inlines = [JobImageInline]
+    fieldsets = (
+        ('Job Info', {
+            'fields': ('job_id', 'description', 'remarks', 'status', 'priority', 'is_defective')
+        }),
+        ('Users', {
+            'fields': ('user', 'updated_by')
+        }),
+        ('Related Items', {
+            'fields': ('rooms', 'topics')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at', 'completed_at')
+        }),
+    )
+    
+    def get_topics(self, obj):
+        return ", ".join([topic.title for topic in obj.topics.all()])
+    
+    get_topics.short_description = 'Topics'
 
 @admin.register(Property)
 class PropertyAdmin(admin.ModelAdmin):
-    list_display = ('name', 'property_id', 'created_at')
-    search_fields = ('name', 'property_id')
+    list_display = ['property_id', 'name', 'created_at', 'get_users_count']
+    search_fields = ['property_id', 'name', 'description']
+    filter_horizontal = ['users']
+    readonly_fields = ['property_id', 'created_at']
+    
+    def get_users_count(self, obj):
+        return obj.users.count()
+    
+    get_users_count.short_description = 'Users'
+
+@admin.register(Room)
+class RoomAdmin(admin.ModelAdmin):
+    list_display = ['room_id', 'name', 'room_type', 'is_active', 'created_at']
+    list_filter = ['room_type', 'is_active', 'created_at']
+    search_fields = ['name', 'room_type']
+    filter_horizontal = ['properties']
+    readonly_fields = ['room_id', 'created_at']
+    actions = ['activate_rooms', 'deactivate_rooms']
+    
+    def activate_rooms(self, request, queryset):
+        queryset.update(is_active=True)
+        self.message_user(request, f"{queryset.count()} rooms have been activated.")
+    
+    def deactivate_rooms(self, request, queryset):
+        queryset.update(is_active=False)
+        self.message_user(request, f"{queryset.count()} rooms have been deactivated.")
+    
+    activate_rooms.short_description = "Activate selected rooms"
+    deactivate_rooms.short_description = "Deactivate selected rooms"
+
+@admin.register(Topic)
+class TopicAdmin(admin.ModelAdmin):
+    list_display = ['title', 'get_jobs_count']
+    search_fields = ['title', 'description']
+    
+    def get_jobs_count(self, obj):
+        return obj.jobs.count()
+    
+    get_jobs_count.short_description = 'Jobs'
 
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
-    list_display = ('user', 'positions', 'profile_image_tag')
-    search_fields = ('user__username',)
-    list_filter = ('user__is_active',)
+    list_display = ['user', 'positions', 'image_preview']
+    search_fields = ['user__username', 'positions']
+    filter_horizontal = ['properties']
+    raw_id_fields = ['user']
     
-    def profile_image_tag(self, obj):
+    def image_preview(self, obj):
         if obj.profile_image:
-            return format_html(
-                '<img src="{}" width="50" height="50" style="object-fit: cover;" />',
-                obj.profile_image.url
-            )
+            return format_html('<img src="{}" width="50" height="50" style="border-radius: 50%;" />', obj.profile_image.url)
         return "No Image"
-    profile_image_tag.short_description = 'Profile Image'
+    
+    image_preview.short_description = 'Profile Image'

@@ -1,602 +1,350 @@
 from django.contrib.auth import get_user_model
 from django.conf import settings
-from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework import status, viewsets
+from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from google.oauth2 import id_token
 from google.auth.transport import requests
-from .models import UserProfile
-import logging
-from django.http import HttpResponse
-import json  # Import json for logging request and response data
-
-
-from rest_framework import viewsets
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.decorators import action
-from rest_framework import viewsets, status
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework.permissions import AllowAny
-from rest_framework.views import APIView
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
-from .models import Room, Topic, Job, Property, UserProfile, Property
+from .models import UserProfile, Property, Room, Topic, Job, Session
 from .serializers import (
-    RoomSerializer,
-    TopicSerializer,
-    JobSerializer,
-    PropertySerializer,
-    UserProfileSerializer
+    UserProfileSerializer, PropertySerializer, RoomSerializer, TopicSerializer, JobSerializer,
+    UserSerializer  # Added for RegisterView
 )
 import logging
+import json
+import uuid
+from django.utils import timezone
+from datetime import timedelta
+from django.shortcuts import get_object_or_404
 
 logger = logging.getLogger(__name__)
+User = get_user_model()
 
+# ViewSets
 class RoomViewSet(viewsets.ModelViewSet):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     queryset = Room.objects.all()
     serializer_class = RoomSerializer
 
 class TopicViewSet(viewsets.ModelViewSet):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     queryset = Topic.objects.all()
     serializer_class = TopicSerializer
 
 class JobViewSet(viewsets.ModelViewSet):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     queryset = Job.objects.all()
     serializer_class = JobSerializer
-    lookup_field = 'job_id'  # Use job_id instead of pk for lookups
+    lookup_field = 'job_id'
 
     def get_object(self):
-        """
-        Override get_object to use job_id for lookups
-        """
         queryset = self.get_queryset()
-        lookup_url_kwarg = self.lookup_url_kwarg or self.lookup_field
-        filter_kwargs = {self.lookup_field: self.kwargs[lookup_url_kwarg]}
-
+        filter_kwargs = {self.lookup_field: self.kwargs[self.lookup_field]}
         obj = get_object_or_404(queryset, **filter_kwargs)
         self.check_object_permissions(self.request, obj)
         return obj
 
     @action(detail=True, methods=['patch'])
     def update_status(self, request, job_id=None):
-        """
-        Custom action to update job status
-        """
         job = self.get_object()
         status_value = request.data.get('status')
-
         if status_value and status_value not in dict(Job.STATUS_CHOICES):
-            return Response(
-                {"detail": "Invalid status value."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+            return Response({"detail": "Invalid status value."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if request.user.is_authenticated:
+            job.updated_by = request.user
+        
+        if status_value == 'completed' and job.status != 'completed':
+            job.completed_at = timezone.now()
+            
         job.status = status_value
         job.save()
         serializer = self.get_serializer(job)
         return Response(serializer.data)
 
-    def retrieve(self, request, *args, **kwargs):
-        """
-        Override retrieve to add custom logging
-        """
-        try:
+    def perform_create(self, serializer):
+        if self.request.user.is_authenticated:
+            serializer.save(user=self.request.user, updated_by=self.request.user)
+        else:
+            serializer.save()
+
+    def perform_update(self, serializer):
+        if self.request.user.is_authenticated:
             instance = self.get_object()
-            serializer = self.get_serializer(instance)
-            logger.info(f"Retrieved job: {instance.job_id}")
-            return Response(serializer.data)
-        except Exception as e:
-            logger.error(f"Error retrieving job: {str(e)}")
-            return Response(
-                {"detail": "Job not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            data = serializer.validated_data
+            if 'status' in data and data['status'] == 'completed' and instance.status != 'completed':
+                serializer.save(updated_by=self.request.user, completed_at=timezone.now())
+            else:
+                serializer.save(updated_by=self.request.user)
+        else:
+            serializer.save()
 
 class UserProfileViewSet(viewsets.ModelViewSet):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     queryset = UserProfile.objects.all()
     serializer_class = UserProfileSerializer
 
     def get_queryset(self):
-        queryset = UserProfile.objects.all().prefetch_related('properties')
-
-        # Filter by position
-        position = self.request.query_params.get('position', None)
-        if position:
-            queryset = queryset.filter(positions__icontains=position)
-
-        return queryset
+        return UserProfile.objects.filter(user=self.request.user).prefetch_related('properties')
 
     @action(detail=False, methods=['get'])
     def me(self, request):
-        """Get current user's profile"""
         profile = get_object_or_404(UserProfile, user=request.user)
         serializer = self.get_serializer(profile)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def add_property(self, request, pk=None):
-        """Add property to user profile"""
         profile = self.get_object()
         property_id = request.data.get('property_id')
-
         if not property_id:
-            return Response(
-                {'error': 'property_id is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        property = get_object_or_404(Property, id=property_id)
+            return Response({'error': 'property_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        property = get_object_or_404(Property, property_id=property_id)
         profile.properties.add(property)
-
         serializer = self.get_serializer(profile)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def remove_property(self, request, pk=None):
-        """Remove property from user profile"""
         profile = self.get_object()
         property_id = request.data.get('property_id')
-
         if not property_id:
-            return Response(
-                {'error': 'property_id is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        property = get_object_or_404(Property, id=property_id)
+            return Response({'error': 'property_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        property = get_object_or_404(Property, property_id=property_id)
         profile.properties.remove(property)
-
         serializer = self.get_serializer(profile)
         return Response(serializer.data)
 
-class UserProfileViewSet(viewsets.ModelViewSet):
-    permission_classes = [AllowAny]
-    queryset = UserProfile.objects.all()
-    serializer_class = UserProfileSerializer
-
-    def get_queryset(self):
-        queryset = UserProfile.objects.all().prefetch_related('properties')
-
-        # Filter by position
-        position = self.request.query_params.get('position', None)
-        if position:
-            queryset = queryset.filter(positions__icontains=position)
-
-        return queryset
-
-    @action(detail=False, methods=['get'])
-    def me(self, request):
-        """Get current user's profile"""
-        profile = get_object_or_404(UserProfile, user=request.user)
-        serializer = self.get_serializer(profile)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['post'])
-    def add_property(self, request, pk=None):
-        """Add property to user profile"""
-        profile = self.get_object()
-        property_id = request.data.get('property_id')
-
-        if not property_id:
-            return Response(
-                {'error': 'property_id is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        property = get_object_or_404(Property, id=property_id)
-        profile.properties.add(property)
-
-        serializer = self.get_serializer(profile)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['post'])
-    def remove_property(self, request, pk=None):
-        """Remove property from user profile"""
-        profile = self.get_object()
-        property_id = request.data.get('property_id')
-
-        if not property_id:
-            return Response(
-                {'error': 'property_id is required'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        property = get_object_or_404(Property, id=property_id)
-        profile.properties.remove(property)
-
-        serializer = self.get_serializer(profile)
-        return Response(serializer.data)
 class PropertyViewSet(viewsets.ModelViewSet):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
     queryset = Property.objects.all()
     serializer_class = PropertySerializer
 
     def get_queryset(self):
-        queryset = Property.objects.all()
+        return Property.objects.filter(users=self.request.user)
 
-        # Filter by price range
-        min_price = self.request.query_params.get('min_price', None)
-        max_price = self.request.query_params.get('max_price', None)
-        if min_price:
-            queryset = queryset.filter(price__gte=min_price)
-        if max_price:
-            queryset = queryset.filter(price__lte=max_price)
+# Session Management Views for NextAuth
+class LoginView(APIView):
+    permission_classes = [AllowAny]
 
-        # Filter by location
-        location = self.request.query_params.get('location', None)
-        if location:
-            queryset = queryset.filter(location__icontains=location)
+    def post(self, request):
+        username = request.data.get('username')
+        password = request.data.get('password')
+        user = User.objects.filter(username=username).first()
 
-        return queryset
+        if user and user.check_password(password):
+            refresh = RefreshToken.for_user(user)
+            session = Session.objects.create(
+                user=user,
+                session_token=str(uuid.uuid4()),
+                access_token=str(refresh.access_token),
+                refresh_token=str(refresh),
+                expires_at=timezone.now() + timedelta(days=30),
+            )
+            return Response({
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'session_token': session.session_token,
+                'user_id': user.id,
+            })
+        return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-    @action(detail=True, methods=['post'])
-    def add_to_profile(self, request, pk=None):
-        property = self.get_object()
-        user_profile = get_object_or_404(UserProfile, user=request.user)
-        user_profile.properties.add(property)
-        return Response({'status': 'property added to profile'})
+class RegisterView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        logger.debug(f"Register request payload: {request.data}")
+        serializer = UserSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            refresh = RefreshToken.for_user(user)
+            session = Session.objects.create(
+                user=user,
+                session_token=str(uuid.uuid4()),
+                access_token=str(refresh.access_token),
+                refresh_token=str(refresh),
+                expires_at=timezone.now() + timedelta(days=30),
+            )
+            response_data = {
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'session_token': session.session_token,
+                'user_id': user.id,
+            }
+            logger.info(f"User registered: {user.username} - Response: {response_data}")
+            return Response(response_data, status=status.HTTP_201_CREATED)
+        logger.warning(f"Registration failed: {serializer.errors}")
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        session_token = request.data.get('session_token')
+        if session_token:
+            Session.objects.filter(session_token=session_token, user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 class CustomSessionView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user = request.user
-        # Get user profile
-        try:
-            profile = user.profile  # Assuming you have a related profile model
-            session_data = {  # Create session_data dictionary
-                "user": {     # Wrap user info in "user" object
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "is_staff": user.is_staff,
-                    "profile": {
-                        "properties": profile.properties,
-                        "positions": profile.positions,
-                        "profile_image": profile.profile_image if hasattr(profile, 'profile_image') else None
-                    }
-                },
-                "expires": "YOUR_EXPIRATION_TIMESTAMP_HERE" # ⚠️ You need to set a proper expiration timestamp!
-            }
-            return Response({"session": session_data}) # Wrap everything in "session"
-
-        except:
-            session_data = { # Create session_data dictionary even in error case
-                "user": {      # Wrap user info in "user" object
-                    "id": user.id,
-                    "username": user.username,
-                    "email": user.email,
-                    "is_staff": user.is_staff,
-                },
-                "expires": "YOUR_EXPIRATION_TIMESTAMP_HERE" # ⚠️ You need to set a proper expiration timestamp!
-            }
-            return Response({"session": session_data}) # Wrap everything in "session"
-from django.views.decorators.csrf import csrf_exempt
-@csrf_exempt
-def log_view(request):
-    """
-    Handles requests to the /api/auth/_log endpoint.
-    Logs incoming requests or returns a simple response.
-    """
-    if request.method == "POST":
-        print("Log received:", request.body.decode('utf-8'))
-        return JsonResponse({"message": "Log received"}, status=200)
-    return JsonResponse({"error": "Method not allowed"}, status=405)
-
-class UserSessionView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        user = request.user
+        session = Session.objects.filter(user=request.user).first()
+        if not session:
+            return Response({'detail': 'No active session found'}, status=status.HTTP_404_NOT_FOUND)
         return Response({
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "profile_image": getattr(user, 'profile_image', None),  # Optional field
+            'session_token': session.session_token,
+            'access_token': session.access_token,
+            'refresh_token': session.refresh_token,
+            'expires_at': session.expires_at,
+            'created_at': session.created_at,
         })
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from django.contrib.auth.decorators import login_required
-from django.middleware.csrf import get_token
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth.models import AnonymousUser
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def auth_check(request):
-    try:
-        csrf_token = get_token(request)
 
-        if request.user.is_authenticated:
-            refresh = RefreshToken.for_user(request.user)
-            return Response({
-                'authenticated': True,
-                'user': {
-                    'username': request.user.username,
-                },
-                'tokens': {
-                    'access': str(refresh.access_token),
-                    'refresh': str(refresh),
-                },
-                'csrf_token': csrf_token
-            })
-
-        return Response({
-            'authenticated': False,
-            'csrf_token': csrf_token
-        }, status=200)
-
-    except Exception as e:
-        print(f"Auth check error: {str(e)}")
-        return Response({
-            'authenticated': False,
-            'error': 'Authentication error occurred'
-        }, status=200)
-
-# Add this for token refresh
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def refresh_token(request):
-    refresh_token = request.data.get('refresh')
-    try:
-        refresh = RefreshToken(refresh_token)
+    def post(self, request):
+        refresh = RefreshToken.for_user(request.user)
+        session, created = Session.objects.update_or_create(
+            user=request.user,
+            defaults={
+                'session_token': str(uuid.uuid4()),
+                'access_token': str(refresh.access_token),
+                'refresh_token': str(refresh),
+                'expires_at': timezone.now() + timedelta(days=30),
+            }
+        )
         return Response({
             'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'session_token': session.session_token,
+            'user_id': request.user.id,
         })
-    except Exception as e:
-        return Response({'error': 'Invalid refresh token'}, status=401)
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def create_job(request):
-    if isinstance(request.user, AnonymousUser):
-        print("Anonymous User detected in the request")
-    else:
-        print(f"Authenticated User: {request.user.username}")
-
-    serializer = JobSerializer(data=request.data, context={'request': request})
-    if serializer.is_valid():
-        job = serializer.save()
-        return Response(JobSerializer(job).data, status=201)
-    return Response(serializer.errors, status=400)
-from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt
-
-@csrf_exempt
-@require_http_methods(["GET"])
-def auth_providers(request):
-    providers = {
-        "providers": [
-            {
-                "id": "credentials",
-                "name": "Username & Password",
-                "type": "credentials"
-            }
-        ]
-    }
-    return JsonResponse(providers)
-
-@csrf_exempt
-@require_http_methods(["GET"])
-def auth_error(request):
-    error_message = {
-        "error": "Authentication failed",
-        "message": "Invalid credentials or session expired"
-    }
-    return JsonResponse(error_message, status=401)
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from django.contrib.auth import authenticate, login
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def login_view(request):
-    username = request.data.get('username')
-    password = request.data.get('password')
-
-    user = authenticate(username=username, password=password)
-    if user:
-        login(request, user)
-        return Response({
-            'detail': 'Login successful',
-            'user': {
-                'username': user.username,
-                'email': user.email
-            }
-        })
-    return Response(
-        {'detail': 'Invalid credentials'},
-        status=status.HTTP_401_UNAUTHORIZED
-    )
-def log_view(request):
-    if request.method == 'GET':
-        return JsonResponse({"message": "Log endpoint reached"})
-    else:
-        return JsonResponse({"error": "Method not allowed"}, status=405)
-@api_view(['GET'])
-def health_check(request):
-    return Response({"status": "healthy"})
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework.permissions import AllowAny
+# New RegisterView (Fix for the error)
 class RegisterView(APIView):
-   authentication_classes = []
-   permission_classes = [AllowAny]
+    permission_classes = [AllowAny]
 
-   def post(self, request):
-    serializer = UserRegistrationSerializer(data=request.data)
-    if serializer.is_valid():
-        user = serializer.save()
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'user': serializer.data
-        }, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-@api_view(['GET'])
-@permission_classes([AllowAny])
-def health_check(request):
-    return Response({"status": "healthy"}, status=200)
-from .serializers import UserRegistrationSerializer, LoginSerializer
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-@csrf_exempt
-def register_user(request):
-    serializer = UserRegistrationSerializer(data=request.data)
-    if serializer.is_valid():
-        user = serializer.save()
-        refresh = RefreshToken.for_user(user)
-        return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email
-            }
-        }, status=status.HTTP_201_CREATED)
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-@api_view(['POST'])
-@permission_classes([AllowAny])
-@csrf_exempt
-def login_user(request):
-    serializer = LoginSerializer(data=request.data)
-    if serializer.is_valid():
-        username = serializer.validated_data['username']
-        password = serializer.validated_data['password']
-        user = authenticate(username=username, password=password)
-
-        if user:
+    def post(self, request):
+        serializer = UserSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
             refresh = RefreshToken.for_user(user)
+            session = Session.objects.create(
+                user=user,
+                session_token=str(uuid.uuid4()),
+                access_token=str(refresh.access_token),
+                refresh_token=str(refresh),
+                expires_at=timezone.now() + timedelta(days=30),
+            )
             return Response({
                 'access': str(refresh.access_token),
                 'refresh': str(refresh),
-                'user': {
-                    'id': user.id,
-                    'username': user.username,
-                    'email': user.email
-                }
-            })
-        return Response(
-            {'detail': 'Invalid credentials'},
-            status=status.HTTP_401_UNAUTHORIZED
-        )
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                'session_token': session.session_token,
+                'user_id': user.id,
+            }, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+# Additional Views with Previous Fixes
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def auth_check(request):
-    try:
-        user = request.user
-        # Get or create user profile
-        profile, created = UserProfile.objects.get_or_create(user=user)
+    """Check if the user is authenticated and return basic user info."""
+    return Response({
+        "authenticated": True,
+        "username": request.user.username,
+        "email": request.user.email,
+    }, status=status.HTTP_200_OK)
 
-        return Response({
-            'isAuthenticated': True,
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-                'profile': {
-                    'id': profile.id,
-                    'positions': profile.positions,
-                    'profile_image': str(profile.profile_image),
-                    'properties': list(profile.properties.values_list('id', flat=True))
-                }
-            }
-        })
-    except Exception as e:
-        print(f"Auth check error: {str(e)}")
-        return Response({
-            'isAuthenticated': False,
-            'error': str(e)
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-logger = logging.getLogger(__name__)
-User = get_user_model()
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def auth_providers(request):
+    """Return a list of available authentication providers."""
+    providers = {
+        "google": {
+            "name": "Google",
+            "endpoint": "/api/v1/auth/google/",
+            "description": "Sign in with Google OAuth2",
+        },
+        "local": {
+            "name": "Local",
+            "endpoint": "/api/auth/login/",
+            "description": "Sign in with username and password",
+        },
+    }
+    return Response(providers, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+def login_view(request):
+    """Handle user login and return JWT tokens."""
+    username = request.data.get('username')
+    password = request.data.get('password')
+    user = User.objects.filter(username=username).first()
+
+    if user and user.check_password(password):
+        refresh = RefreshToken.for_user(user)
+        session = Session.objects.create(
+            user=user,
+            session_token=str(uuid.uuid4()),
+            access_token=str(refresh.access_token),
+            refresh_token=str(refresh),
+            expires_at=timezone.now() + timedelta(days=30),
+        )
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'session_token': session.session_token,
+            'user_id': user.id,
+        })
+    return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def log_view(request):
+    """Simple view to log access and return a message."""
+    logger.info(f"Log view accessed by user: {request.user.username}")
+    return Response({"message": "This is a log view"}, status=status.HTTP_200_OK)
+
+# Google Auth View
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def google_auth(request):
-    """Handle Google authentication"""
-    logger.info("google_auth view started") # Log start
-
+    logger.info("google_auth view started")
     try:
-        logger.info(f"Request Data: {json.dumps(request.data)}") # Log request data
-
-        # Get tokens from request
         id_token_credential = request.data.get('id_token')
         access_token = request.data.get('access_token')
 
         if not id_token_credential:
-            logger.warning("No ID token provided in request") # Log warning
-            return Response(
-                {'error': 'No ID token provided'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            logger.warning("No ID token provided in request")
+            return Response({'error': 'No ID token provided'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Verify the ID token with Google
-        try:
-            idinfo = id_token.verify_oauth2_token(
-                id_token_credential,
-                requests.Request(),
-                settings.GOOGLE_CLIENT_ID
-            )
-            logger.info("Token verification successful") # Log success
-        except ValueError as ve:
-            logger.error(f"Token verification failed: {str(ve)}") # Log verification failure
-            return Response(
-                {'error': 'Invalid token'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        idinfo = id_token.verify_oauth2_token(id_token_credential, requests.Request(), settings.GOOGLE_CLIENT_ID)
+        logger.info("Token verification successful")
 
-        # Get user information
         email = idinfo.get('email')
         google_id = idinfo.get('sub')
-        logger.info(f"Extracted email: {email}, google_id: {google_id} from token") # Log extracted info
 
         if not email:
-            logger.warning("Email not provided by Google in token") # Log email missing
-            return Response(
-                {'error': 'Email not provided by Google'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            logger.warning("Email not provided by Google in token")
+            return Response({'error': 'Email not provided by Google'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Try to find user by Google ID first
         try:
-            logger.info(f"Attempting to find UserProfile by google_id: {google_id}") # Log lookup attempt
             userprofile = UserProfile.objects.get(google_id=google_id)
             user = userprofile.user
-            logger.info(f"UserProfile found by google_id: {google_id}, User: {user.username}") # Log user found
         except UserProfile.DoesNotExist:
-            logger.info(f"UserProfile not found by google_id: {google_id}, trying to find user by email: {email}") # Log not found by google_id
-            # Try to find user by email
             try:
                 user = User.objects.get(email=email)
-                logger.info(f"User found by email: {email}, username: {user.username}") # Log user found by email
                 userprofile = user.userprofile
                 userprofile.google_id = google_id
                 userprofile.save()
-                logger.info(f"UserProfile updated with google_id: {google_id}") # Log profile updated
             except User.DoesNotExist:
-                logger.info(f"User not found by email: {email}, creating new user") # Log user creation
-                # Create new user
                 username = email.split('@')[0]
                 base_username = username
                 counter = 1
                 while User.objects.filter(username=username).exists():
                     username = f"{base_username}{counter}"
                     counter += 1
-
                 user = User.objects.create(
                     username=username,
                     email=email,
@@ -604,32 +352,26 @@ def google_auth(request):
                     first_name=idinfo.get('given_name', ''),
                     last_name=idinfo.get('family_name', '')
                 )
-                logger.info(f"New user created: username={user.username}, email={email}") # Log new user creation
-                userprofile = UserProfile.objects.create(user=user, google_id=google_id) # Create user profile
-                logger.info(f"New UserProfile created for user: {user.username}, google_id: {google_id}") # Log new profile creation
+                userprofile = UserProfile.objects.create(user=user, google_id=google_id)
 
-        # Update profile with Google data
-        try:
-            logger.info(f"Updating UserProfile for user: {user.username} from Google data") # Log profile update start
-            userprofile.update_from_google_data(idinfo)
-            userprofile.access_token = access_token
-            userprofile.save()
-            logger.info(f"UserProfile updated successfully for user: {user.username}") # Log profile update success
-        except Exception as e:
-            logger.error(f"Error updating user profile: {str(e)}") # Log profile update error
-            logger.exception(e) # Log exception details
+        userprofile.update_from_google_data(idinfo)
+        userprofile.access_token = access_token
+        userprofile.save()
 
-        # Generate JWT tokens
-        logger.info(f"Generating JWT tokens for user: {user.username}") # Log token generation start
         refresh = RefreshToken.for_user(user)
-        tokens = {
-            'access': str(refresh.access_token),
-            'refresh': str(refresh)
-        }
-        logger.info(f"JWT tokens generated for user: {user.username}") # Log token generation success
+        session = Session.objects.create(
+            user=user,
+            session_token=str(uuid.uuid4()),
+            access_token=str(refresh.access_token),
+            refresh_token=str(refresh),
+            expires_at=timezone.now() + timedelta(days=30),
+        )
 
-        response_data = { # Capture response data for logging
-            'tokens': tokens,
+        response_data = {
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'session_token': session.session_token,
+            'user_id': user.id,
             'user': {
                 'id': user.id,
                 'username': user.username,
@@ -639,14 +381,16 @@ def google_auth(request):
                 'properties': list(userprofile.properties.values('id', 'name', 'property_id')),
             }
         }
-        logger.info(f"Response Data to Frontend: {json.dumps(response_data)}") # Log response data
-
+        logger.info(f"Response Data to Frontend: {json.dumps(response_data)}")
         return Response(response_data, status=status.HTTP_200_OK)
 
     except Exception as e:
         logger.error(f"Unexpected error in google_auth: {str(e)}")
-        logger.exception(e) # Log full traceback
-        return Response(
-            {'error': 'Authentication failed', 'detail': str(e)},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        logger.exception(e)
+        return Response({'error': 'Authentication failed', 'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# Other Views
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def health_check(request):
+    return Response({"status": "healthy"}, status=200)

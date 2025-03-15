@@ -110,7 +110,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'mylubd_db',
         'USER': 'mylubd_user',
-        'PASSWORD': 'Sqreele1234#',
+        'PASSWORD': 'Sqreele1234',
         'HOST': 'db',
         'PORT': '5432',
     }

@@ -250,6 +250,8 @@ class Job(models.Model):
         blank=True, 
         editable=False
     )
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='updated_jobs')
+   
     user = models.ForeignKey(
         User, 
         on_delete=models.CASCADE, 
@@ -446,3 +448,16 @@ def update_from_google_data(self, idinfo):
     self.email_verified = idinfo.get('email_verified')
     self.last_login_google = timezone.now()
     self.save()
+class Session(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions')
+    session_token = models.CharField(max_length=255, unique=True)
+    access_token = models.TextField()
+    refresh_token = models.TextField()
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+    def __str__(self):
+        return f"Session for {self.user.username} - Expires: {self.expires_at}"
