@@ -1,31 +1,37 @@
 #!/bin/sh
 
-# Wait for postgres
+set -e
+
+echo "Waiting for postgres..."
 while ! nc -z $SQL_HOST $SQL_PORT; do
-    echo "Waiting for postgres..."
-    sleep 1
+  sleep 0.1
 done
 echo "PostgreSQL started"
 
-cd src
-
-# Create and set permissions for media and static directories
-mkdir -p /app/media/maintenance_job_images
-mkdir -p /app/static
-
-# Set permissions
-chown -R www-data:www-data /app/media
-chown -R www-data:www-data /app/static
-chmod -R 755 /app/media
-chmod -R 755 /app/static
-
 # Run migrations
+echo "Running migrations..."
 python manage.py migrate
 
+# Create superuser
+echo "Creating superuser..."
+python -c "
+import os
+import django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myLubd.settings')
+django.setup()
+from django.contrib.auth import get_user_model
+User = get_user_model()
+if not User.objects.filter(username='admin').exists():
+    User.objects.create_superuser('admin', 'admin@example.com', 'sqreele1234')
+    print('Superuser created!')
+else:
+    print('Superuser already exists.')
+"
+
 # Collect static files
-python manage.py collectstatic --no-input
+echo "Collecting static files..."
+python manage.py collectstatic --noinput
 
 # Start server
-python manage.py runserver 0.0.0.0:8000
-
+echo "Starting server..."
 exec "$@"
