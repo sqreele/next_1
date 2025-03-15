@@ -1,0 +1,24 @@
+version: '3'
+
+services:
+  nextjs-frontend:
+    user: root
+    command: >
+      sh -c "
+        chmod -R 777 /app &&
+        echo 'legacy-peer-deps=true' > /app/.npmrc &&
+        npm install --legacy-peer-deps &&
+        npm run build &&
+        npm start
+      "
+    volumes:
+      - node_modules:/app/node_modules
+      - npm_cache:/home/nextjs/.npm
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+      - NEXTAUTH_URL=https://pmcs.site
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-your-secret-key}
+
+volumes:
+  node_modules:
+  npm_cache:
