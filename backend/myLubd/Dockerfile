@@ -13,6 +13,8 @@ RUN apt-get update \
         gcc \
         netcat-traditional \
         postgresql-client \
+        libpq-dev \
+        python3-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
