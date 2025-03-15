@@ -1,0 +1,8 @@
+FROM my_project_frontend
+USER root
+# Fix permissions
+RUN chmod -R 777 /app
+# Create .npmrc to handle React version conflicts
+RUN echo "legacy-peer-deps=true" > /app/.npmrc
+# Switch back to nextjs user
+USER nextjs
