@@ -5,6 +5,7 @@ WORKDIR /app
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 # Install system dependencies
 RUN apt-get update \
@@ -15,9 +16,12 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Copy requirements first (better caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Create directories for static and media files
+RUN mkdir -p /app/static /app/media
 
 # Copy project
 COPY . .
@@ -26,11 +30,8 @@ COPY . .
 COPY entrypoint.sh .
 RUN chmod +x /app/entrypoint.sh
 
-# Create directories for static and media files
-RUN mkdir -p /app/static /app/media
-
 # Run entrypoint.sh
 ENTRYPOINT ["/app/entrypoint.sh"]
 
-# Start Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "4", "myLubd.wsgi:application"]
+# Start Gunicorn from the src directory
+CMD ["gunicorn", "--chdir", "/app/src", "--bind", "0.0.0.0:8000", "--workers", "4", "myLubd.wsgi:application"]

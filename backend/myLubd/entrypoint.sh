@@ -8,6 +8,9 @@ while ! nc -z $SQL_HOST $SQL_PORT; do
 done
 echo "PostgreSQL started"
 
+# Change to src directory where manage.py is located
+cd /app/src
+
 # Run migrations
 echo "Running migrations..."
 python manage.py migrate
