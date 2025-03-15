@@ -2,6 +2,8 @@ version: '3'
 
 services:
   nextjs-frontend:
+    # Keep the original image or build directive from your main docker-compose.yml
+    image: my_project_frontend:latest  # Adjust this to match your actual image name
     user: root
     command: >
       sh -c "
