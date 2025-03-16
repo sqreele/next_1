@@ -1,20 +1,38 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
-echo "Waiting for postgres..."
-while ! nc -z $SQL_HOST $SQL_PORT; do
-    sleep 0.1
+# Wait for postgres
+echo "Waiting for PostgreSQL..."
+while ! nc -z db 5432; do
+  sleep 1
 done
 echo "PostgreSQL started"
 
-# Make sure we're in the right directory
-cd /app/myLubd
+# Apply database migrations
+echo "Applying database migrations..."
+python manage.py migrate --noinput
 
-echo "Running migrations..."
-python manage.py migrate
+# Create superuser if necessary
+echo "Checking if superuser exists..."
+python -c "
+import os
+import django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'myLubd.settings')
+django.setup()
+from django.contrib.auth import get_user_model
+User = get_user_model()
+if not User.objects.filter(username='admin').exists():
+    print('Creating superuser...')
+    User.objects.create_superuser(username='admin', email='admin@example.com', password='sqreele1234')
+    print('Superuser created successfully')
+else:
+    print('Superuser already exists')
+"
 
+# Collect static files
 echo "Collecting static files..."
-python manage.py collectstatic --no-input --clear
+python manage.py collectstatic --noinput
 
-echo "Starting Gunicorn..."
-exec gunicorn myLubd.wsgi:application --bind 0.0.0.0:8000 --workers 3
+# Start server
+echo "Starting server..."
+gunicorn myLubd.wsgi:application --bind 0.0.0.0:8000
