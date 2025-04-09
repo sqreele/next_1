@@ -50,6 +50,7 @@ services:
       - ./backend/myLubd/src:/app/src
       - static_volume:/app/static
       - media_volume:/app/media
+      - backup_volume:/root/my_project/backend/backups
     environment:
       - DJANGO_SETTINGS_MODULE=myLubd.settings  # ✅ Fixed the incorrect setting
       - PYTHONPATH=/app  
@@ -142,3 +143,6 @@ volumes:
   media_volume:
     driver: local
     name: pmcs_media_volume
+  backup_volume:  # ✅ Backup Volume Added
+    driver: local
+    name: pmcs_backup_volume

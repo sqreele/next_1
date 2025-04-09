@@ -239,6 +239,6 @@ CORS_PREFLIGHT_MAX_AGE = 86400
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10485760  # 10MB in bytes
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10485760
 DBBACKUP_STORAGE = 'django.core.files.storage.FileSystemStorage'
-DBBACKUP_STORAGE_OPTIONS = {'location': '/root/my_project/backend/myLubd/backups/'}
+DBBACKUP_STORAGE_OPTIONS = {'location': '/root/my_project/backend/backups/'}
 DBBACKUP_CLEANUP_KEEP = 7
 MEDIABACKUP_CLEANUP_KEEP = 7

@@ -1,15 +1,12 @@
 #!/bin/bash
 set -e
 
-BACKUP_DIR="/backup"
 DATE=$(date +%Y%m%d_%H%M%S)
+LOG_FILE="/var/log/backup_script.log"
 
-echo "📦 Starting backup process..."
+echo "[$DATE] 📦 Starting database backup..." >> $LOG_FILE
 
-# Create backup directory if it doesn't exist
-mkdir -p $BACKUP_DIR
+# Run dbbackup inside the Django container
+docker exec backend python manage.py dbbackup >> $LOG_FILE 2>&1
 
-# Backup your application data
-tar -czf $BACKUP_DIR/app_backup_$DATE.tar.gz ./frontend
-
-echo "✅ Backup completed successfully!"
+echo "[$DATE] ✅ Database backup completed successfully." >> $LOG_FILE

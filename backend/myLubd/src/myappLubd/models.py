@@ -268,6 +268,7 @@ class Job(models.Model):
         blank=True
     )
     is_defective = models.BooleanField(default=False)
+    is_preventivemaintenance = models.BooleanField(default=False)
     images = models.ManyToManyField(
         'JobImage', 
         related_name='jobs', 

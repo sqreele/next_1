@@ -1,4 +1,3 @@
-# admin.py
 from django.contrib import admin
 from django.utils.html import format_html
 from .models import Property, Room, Topic, Job, JobImage, UserProfile
@@ -7,7 +6,7 @@ class JobImageInline(admin.TabularInline):
     model = JobImage
     readonly_fields = ['image_preview', 'uploaded_by', 'uploaded_at']
     extra = 0
-
+    
     def image_preview(self, obj):
         if obj.image:
             return format_html('<img src="{}" width="100" />', obj.image.url)
@@ -84,6 +83,7 @@ class TopicAdmin(admin.ModelAdmin):
     def get_jobs_count(self, obj):
         return obj.jobs.count()
     
+    # filter job by property
     get_jobs_count.short_description = 'Jobs'
 
 @admin.register(UserProfile)
