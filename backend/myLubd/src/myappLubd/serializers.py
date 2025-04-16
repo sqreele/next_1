@@ -93,7 +93,7 @@ class JobSerializer(serializers.ModelSerializer):
             'id', 'job_id', 'user', 'updated_by', 'description', 'status', 'priority',
             'remarks', 'created_at', 'updated_at', 'completed_at', 'is_defective',
             'rooms', 'topics', 'images', 'profile_image', 'room_type', 'name',
-            'topic_data', 'room_id', 'image_urls'
+            'topic_data', 'room_id', 'image_urls','is_preventivemaintenance'
         ]
         read_only_fields = ['id', 'job_id', 'user', 'created_at', 'updated_at', 'completed_at', 'images', 'topics']
 

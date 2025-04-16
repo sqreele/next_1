@@ -17,7 +17,7 @@ class JobImageInline(admin.TabularInline):
 @admin.register(Job)
 class JobAdmin(admin.ModelAdmin):
     list_display = ['job_id', 'get_topics', 'status', 'priority', 
-                   'user', 'updated_by', 'created_at', 'updated_at']
+                   'user', 'updated_by', 'created_at', 'updated_at', 'is_preventivemaintenance']
     list_filter = ['status', 'priority', 'is_defective', 'created_at', 'updated_at']
     search_fields = ['job_id', 'description', 'user__username', 'updated_by__username']
     readonly_fields = ['job_id', 'created_at', 'updated_at', 'completed_at']
@@ -25,7 +25,7 @@ class JobAdmin(admin.ModelAdmin):
     inlines = [JobImageInline]
     fieldsets = (
         ('Job Info', {
-            'fields': ('job_id', 'description', 'remarks', 'status', 'priority', 'is_defective')
+            'fields': ('job_id', 'description', 'remarks', 'status', 'priority', 'is_defective', 'is_preventivemaintenance')
         }),
         ('Users', {
             'fields': ('user', 'updated_by')
@@ -83,7 +83,6 @@ class TopicAdmin(admin.ModelAdmin):
     def get_jobs_count(self, obj):
         return obj.jobs.count()
     
-    # filter job by property
     get_jobs_count.short_description = 'Jobs'
 
 @admin.register(UserProfile)
