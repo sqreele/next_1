@@ -44,6 +44,7 @@ class ImageProcessor:
 
 
 class Property(models.Model):
+    id = models.AutoField(primary_key=True) 
     property_id = models.CharField(
         max_length=50,
         unique=True,
@@ -69,6 +70,7 @@ class Property(models.Model):
 
 
 class Room(models.Model):
+    
     room_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100, unique=True)
     room_type = models.CharField(max_length=50, db_index=True)
@@ -106,6 +108,7 @@ class Room(models.Model):
 
 
 class Topic(models.Model):
+    id = models.AutoField(primary_key=True) 
     title = models.CharField(
         max_length=160,
         unique=True,
