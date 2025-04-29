@@ -232,6 +232,7 @@ class JobImage(models.Model):
         super().delete(*args, **kwargs)
 
 class Job(models.Model):
+    is_preventivemaintenance = models.BooleanField(default=False, db_index=True)
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('in_progress', 'In Progress'),
@@ -298,7 +299,7 @@ class Job(models.Model):
         ordering = ['-created_at']
         verbose_name_plural = 'Maintenance Jobs'
         indexes = [
-            models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['status', 'created_at','is_preventivemaintenance']),
         ]
 
     def __str__(self):
