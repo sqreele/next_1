@@ -13,9 +13,6 @@ from .serializers import (
     UserProfileSerializer, PropertySerializer, RoomSerializer, TopicSerializer, JobSerializer,
     UserSerializer  # Added for RegisterView
 )
-from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
-from django.views.decorators.vary import vary_on_headers
 import logging
 import json
 import uuid
@@ -38,146 +35,6 @@ class TopicViewSet(viewsets.ModelViewSet):
     serializer_class = TopicSerializer
 
 class JobViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
-    serializer_class = JobSerializer
-    lookup_field = 'job_id'
-
-    def get_queryset(self):
-        """
-        Optimize queryset with proper filtering, selection, and prefetching.
-        """
-        queryset = Job.objects.all()
-        
-        # Filter by property if provided
-        property_id = self.request.query_params.get('property')
-        if property_id:
-            queryset = queryset.filter(rooms__property__property_id=property_id)
-        
-        # Filter by preventive maintenance flag
-        is_pm = self.request.query_params.get('is_preventivemaintenance')
-        if is_pm:
-            is_pm_bool = is_pm.lower() == 'true'
-            queryset = queryset.filter(is_preventivemaintenance=is_pm_bool)
-        
-        # Apply efficient prefetching to avoid N+1 queries
-        queryset = queryset.select_related('user', 'updated_by', 'user__userprofile')
-        queryset = queryset.prefetch_related('rooms', 'topics', 'job_images')
-        
-        # Apply limit if provided
-        limit = self.request.query_params.get('limit')
-        if limit and limit.isdigit():
-            limit_val = int(limit)
-            queryset = queryset[:limit_val]
-            
-        return queryset
-
-    def get_object(self):
-        queryset = self.get_queryset()
-        filter_kwargs = {self.lookup_field: self.kwargs[self.lookup_field]}
-        obj = get_object_or_404(queryset, **filter_kwargs)
-        self.check_object_permissions(self.request, obj)
-        return obj
-
-    @action(detail=True, methods=['patch'])
-    def update_status(self, request, job_id=None):
-        job = self.get_object()
-        status_value = request.data.get('status')
-        if status_value and status_value not in dict(Job.STATUS_CHOICES):
-            return Response({"detail": "Invalid status value."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if request.user.is_authenticated:
-            job.updated_by = request.user
-        
-        if status_value == 'completed' and job.status != 'completed':
-            job.completed_at = timezone.now()
-            
-        job.status = status_value
-        job.save()
-        serializer = self.get_serializer(job)
-        return Response(serializer.data)
-
-    def perform_create(self, serializer):
-        if self.request.user.is_authenticated:
-            serializer.save(user=self.request.user, updated_by=self.request.user)
-        else:
-            serializer.save()
-
-    def perform_update(self, serializer):
-        if self.request.user.is_authenticated:
-            instance = self.get_object()
-            data = serializer.validated_data
-            if 'status' in data and data['status'] == 'completed' and instance.status != 'completed':
-                serializer.save(updated_by=self.request.user, completed_at=timezone.now())
-            else:
-                serializer.save(updated_by=self.request.user)
-        else:
-            serializer.save()
-            
-    @method_decorator(cache_page(60 * 5))  # Cache for 5 minutes
-    @method_decorator(vary_on_headers("Authorization"))
-    def list(self, request, *args, **kwargs):
-        """Cache job list responses to reduce database load"""
-        return super().list(request, *args, **kwargs)
-
-    @method_decorator(cache_page(60 * 5))
-    @method_decorator(vary_on_headers("Authorization"))
-    def retrieve(self, request, *args, **kwargs):
-        """Cache job detail responses to reduce database load"""
-        return super().retrieve(request, *args, **kwargs)
-            
-    @action(detail=False, methods=['get'])
-    def debug_performance(self, request):
-        """Debug endpoint to check query performance."""
-        from django.db import connection, reset_queries
-        
-        # Start with a clean connection
-        reset_queries()
-        
-        # Get query parameters
-        property_id = request.query_params.get('property')
-        is_pm = request.query_params.get('is_preventivemaintenance')
-        
-        # Start with base queryset
-        queryset = Job.objects.all()
-        
-        # Apply filters
-        if property_id:
-            queryset = queryset.filter(rooms__property__property_id=property_id)
-        
-        if is_pm:
-            is_pm_bool = is_pm.lower() == 'true'
-            queryset = queryset.filter(is_preventivemaintenance=is_pm_bool)
-        
-        # Count jobs before optimization
-        initial_count = queryset.count()
-        initial_queries = len(connection.queries)
-        
-        # Apply optimizations
-        optimized_queryset = queryset.select_related('user', 'updated_by', 'user__userprofile')
-        optimized_queryset = optimized_queryset.prefetch_related('rooms', 'topics', 'job_images')
-        
-        # Count again with optimized query
-        reset_queries()
-        optimized_count = list(optimized_queryset[:10])  # Force query execution
-        optimized_queries = len(connection.queries)
-        
-        # Get slow queries
-        slow_queries = [
-            {'sql': q['sql'], 'time': float(q['time'])} 
-            for q in connection.queries 
-            if float(q['time']) > 0.1
-        ]
-        
-        return Response({
-            'job_count': initial_count,
-            'initial_query_count': initial_queries,
-            'optimized_query_count': optimized_queries,
-            'slow_queries': slow_queries,
-            'filter_params': {
-                'property_id': property_id,
-                'is_preventivemaintenance': is_pm,
-            }
-        })
     permission_classes = [IsAuthenticated]
     queryset = Job.objects.all()
     serializer_class = JobSerializer
@@ -537,3 +394,155 @@ def google_auth(request):
 @permission_classes([AllowAny])
 def health_check(request):
     return Response({"status": "healthy"}, status=200)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_data(request):
+    """
+    Get all jobs, rooms, and topics related to preventive maintenance.
+    Optional query parameters:
+    - property_id: Filter by property
+    - limit: Limit the number of results
+    """
+    property_id = request.query_params.get('property')
+    limit_str = request.query_params.get('limit')
+    limit = int(limit_str) if limit_str and limit_str.isdigit() else None
+    
+    # Get all preventive maintenance jobs
+    jobs_query = Job.objects.filter(is_preventivemaintenance=True)
+    
+    # Filter by property if provided
+    if property_id:
+        # If you added the direct property field to Job model
+        jobs_query = jobs_query.filter(property__property_id=property_id)
+    
+    # Apply limit if provided
+    if limit:
+        jobs_query = jobs_query[:limit]
+    
+    # Get room IDs from these jobs
+    room_ids = jobs_query.values_list('rooms__id', flat=True).distinct()
+    rooms = Room.objects.filter(id__in=room_ids)
+    
+    # Get topic IDs from these jobs
+    topic_ids = jobs_query.values_list('topics__id', flat=True).distinct()
+    topics = Topic.objects.filter(id__in=topic_ids)
+    
+    # Serialize the data
+    jobs_serializer = JobSerializer(jobs_query, many=True, context={'request': request})
+    rooms_serializer = RoomSerializer(rooms, many=True)
+    topics_serializer = TopicSerializer(topics, many=True)
+    
+    return Response({
+        'jobs': jobs_serializer.data,
+        'rooms': rooms_serializer.data,
+        'topics': topics_serializer.data,
+        'count': {
+            'jobs': jobs_query.count(),
+            'rooms': rooms.count(),
+            'topics': topics.count()
+        }
+    })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_jobs(request):
+    """
+    Get all jobs related to preventive maintenance.
+    Optional query parameters:
+    - property_id: Filter by property
+    - limit: Limit the number of results
+    - status: Filter by job status
+    """
+    property_id = request.query_params.get('property')
+    limit_str = request.query_params.get('limit')
+    status_param = request.query_params.get('status')
+    limit = int(limit_str) if limit_str and limit_str.isdigit() else None
+    
+    # Start with all preventive maintenance jobs
+    jobs_query = Job.objects.filter(is_preventivemaintenance=True)
+    
+    # Filter by property if provided
+    if property_id:
+        jobs_query = jobs_query.filter(property__property_id=property_id)
+    
+    # Filter by status if provided
+    if status_param:
+        jobs_query = jobs_query.filter(status=status_param)
+    
+    # Apply limit if provided
+    if limit:
+        jobs_query = jobs_query[:limit]
+    
+    # Serialize the data
+    jobs_serializer = JobSerializer(jobs_query, many=True, context={'request': request})
+    
+    return Response({
+        'jobs': jobs_serializer.data,
+        'count': jobs_query.count()
+    })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_rooms(request):
+    """
+    Get all rooms that have preventive maintenance jobs.
+    Optional query parameters:
+    - property_id: Filter by property
+    - limit: Limit the number of results
+    """
+    property_id = request.query_params.get('property')
+    limit_str = request.query_params.get('limit')
+    limit = int(limit_str) if limit_str and limit_str.isdigit() else None
+    
+    # Start with rooms that have preventive maintenance jobs
+    room_ids = Job.objects.filter(
+        is_preventivemaintenance=True
+    ).values_list('rooms__id', flat=True).distinct()
+    
+    rooms_query = Room.objects.filter(id__in=room_ids)
+    
+    # Filter by property if provided
+    if property_id:
+        rooms_query = rooms_query.filter(property__property_id=property_id)
+    
+    # Apply limit if provided
+    if limit:
+        rooms_query = rooms_query[:limit]
+    
+    # Serialize the data
+    rooms_serializer = RoomSerializer(rooms_query, many=True)
+    
+    return Response({
+        'rooms': rooms_serializer.data,
+        'count': rooms_query.count()
+    })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_topics(request):
+    """
+    Get all topics that are associated with preventive maintenance jobs.
+    Optional query parameters:
+    - limit: Limit the number of results
+    """
+    limit_str = request.query_params.get('limit')
+    limit = int(limit_str) if limit_str and limit_str.isdigit() else None
+    
+    # Start with topics that have preventive maintenance jobs
+    topic_ids = Job.objects.filter(
+        is_preventivemaintenance=True
+    ).values_list('topics__id', flat=True).distinct()
+    
+    topics_query = Topic.objects.filter(id__in=topic_ids)
+    
+    # Apply limit if provided
+    if limit:
+        topics_query = topics_query[:limit]
+    
+    # Serialize the data
+    topics_serializer = TopicSerializer(topics_query, many=True)
+    
+    return Response({
+        'topics': topics_serializer.data,
+        'count': topics_query.count()
+    })
