@@ -606,4 +606,184 @@ def property_is_preventivemaintenance(request, property_id):
         logger.exception(f"Error checking preventive maintenance: {str(e)}")
         return Response({"detail": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_data(request):
+    """
+    Get aggregated preventive maintenance data for all properties the user has access to.
+    """
+    logger.info(f"get_preventive_maintenance_data called by user: {request.user.username}")
+    try:
+        # Get properties accessible to the current user
+        user_properties = Property.objects.filter(users=request.user)
+        logger.info(f"Found {user_properties.count()} properties for user")
+        
+        # Get preventive maintenance jobs for these properties
+        pm_jobs = Job.objects.filter(
+            rooms__property__in=user_properties,
+            is_preventivemaintenance=True
+        ).select_related('user').prefetch_related('rooms', 'topics')
+        
+        # Get counts by status
+        status_counts = {
+            'total': pm_jobs.count(),
+            'pending': pm_jobs.filter(status='pending').count(),
+            'in_progress': pm_jobs.filter(status='in_progress').count(),
+            'completed': pm_jobs.filter(status='completed').count(),
+            'waiting_sparepart': pm_jobs.filter(status='waiting_sparepart').count(),
+            'cancelled': pm_jobs.filter(status='cancelled').count(),
+        }
+        
+        # Calculate completion rate
+        completion_rate = 0
+        if status_counts['total'] > 0:
+            completion_rate = (status_counts['completed'] / status_counts['total']) * 100
+        
+        # Return aggregated data
+        return Response({
+            'status_counts': status_counts,
+            'completion_rate': completion_rate,
+            'property_count': user_properties.count(),
+        })
+    except Exception as e:
+        logger.exception(f"Error in get_preventive_maintenance_data: {str(e)}")
+        return Response(
+            {"detail": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_jobs(request):
+    """
+    Get preventive maintenance jobs for user properties.
+    Supports filtering by property_id and status.
+    """
+    logger.info(f"get_preventive_maintenance_jobs called by user: {request.user.username}")
+    try:
+        # Get query parameters
+        property_id = request.query_params.get('property_id')
+        status_param = request.query_params.get('status')
+        limit = request.query_params.get('limit', 50)  # Default to 50 jobs
+        
+        # Build base query
+        query = Job.objects.filter(is_preventivemaintenance=True)
+        
+        # Add property filter if provided
+        if property_id:
+            try:
+                property_obj = get_object_or_404(Property, property_id=property_id)
+                # Check user has access to this property
+                if not property_obj.users.filter(id=request.user.id).exists():
+                    return Response(
+                        {"detail": "You do not have permission to access this property"},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                query = query.filter(rooms__property=property_obj)
+            except Property.DoesNotExist:
+                return Response(
+                    {"detail": f"Property with ID {property_id} not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            # If no property specified, filter by user's properties
+            user_properties = Property.objects.filter(users=request.user)
+            query = query.filter(rooms__property__in=user_properties)
+        
+        # Add status filter if provided
+        if status_param:
+            query = query.filter(status=status_param)
+        
+        # Apply distinct, select related, and prefetch related for efficiency
+        query = query.distinct().select_related('user').prefetch_related(
+            'rooms', 'topics', 'job_images'
+        )
+        
+        # Apply limit
+        if limit and limit.isdigit():
+            query = query[:int(limit)]
+        
+        # Serialize and return
+        serializer = JobSerializer(query, many=True, context={'request': request})
+        return Response({'jobs': serializer.data, 'count': len(serializer.data)})
+    except Exception as e:
+        logger.exception(f"Error in get_preventive_maintenance_jobs: {str(e)}")
+        return Response(
+            {"detail": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_rooms(request):
+    """
+    Get rooms with preventive maintenance jobs.
+    Optionally filter by property_id.
+    """
+    logger.info(f"get_preventive_maintenance_rooms called by user: {request.user.username}")
+    try:
+        # Get property_id from query params
+        property_id = request.query_params.get('property_id')
+        
+        # Start with rooms that have PM jobs
+        rooms_with_pm = Room.objects.filter(
+            jobs__is_preventivemaintenance=True
+        ).distinct()
+        
+        # Add property filter if provided
+        if property_id:
+            try:
+                property_obj = get_object_or_404(Property, property_id=property_id)
+                # Check user has access to this property
+                if not property_obj.users.filter(id=request.user.id).exists():
+                    return Response(
+                        {"detail": "You do not have permission to access this property"},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+                rooms_with_pm = rooms_with_pm.filter(properties=property_obj)
+            except Property.DoesNotExist:
+                return Response(
+                    {"detail": f"Property with ID {property_id} not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            # If no property specified, filter by user's properties
+            user_properties = Property.objects.filter(users=request.user)
+            rooms_with_pm = rooms_with_pm.filter(properties__in=user_properties)
+        
+        # Serialize and return
+        serializer = RoomSerializer(rooms_with_pm, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        logger.exception(f"Error in get_preventive_maintenance_rooms: {str(e)}")
+        return Response(
+            {"detail": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_topics(request):
+    """
+    Get topics used in preventive maintenance jobs.
+    """
+    logger.info(f"get_preventive_maintenance_topics called by user: {request.user.username}")
+    try:
+        # Get user's properties
+        user_properties = Property.objects.filter(users=request.user)
+        
+        # Get topics from PM jobs for user's properties
+        topics = Topic.objects.filter(
+            jobs__is_preventivemaintenance=True,
+            jobs__rooms__property__in=user_properties
+        ).distinct()
+        
+        # Serialize and return
+        serializer = TopicSerializer(topics, many=True)
+        return Response(serializer.data)
+    except Exception as e:
+        logger.exception(f"Error in get_preventive_maintenance_topics: {str(e)}")
+        return Response(
+            {"detail": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )   
