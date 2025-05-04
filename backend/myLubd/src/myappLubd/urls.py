@@ -41,8 +41,20 @@ urlpatterns = [
     path('api/auth/login/', views.login_view, name='login'),     
      path('api/health/', health_check, name='health_check'),
     path('api/v1/auth/register/', views.RegisterView.as_view(), name='register'),
-     #path('api/preventive-maintenance/', views.get_preventive_maintenance_data, name='preventive_maintenance_data'),
-   # path('api/preventive-maintenance/jobs/', views.get_preventive_maintenance_jobs, name='preventive_maintenance_jobs'),
-    #path('api/preventive-maintenance/rooms/', views.get_preventive_maintenance_rooms, name='preventive_maintenance_rooms'),
-    #path('api/preventive-maintenance/topics/', views.get_preventive_maintenance_topics, name='preventive_maintenance_topics'),
+     path('api/preventive-maintenance/', views.get_preventive_maintenance_data, name='preventive_maintenance_data'),
+    path('api/preventive-maintenance/jobs/', views.get_preventive_maintenance_jobs, name='preventive_maintenance_jobs'),
+    path('api/preventive-maintenance/rooms/', views.get_preventive_maintenance_rooms, name='preventive_maintenance_rooms'),
+    path('api/preventive-maintenance/topics/', views.get_preventive_maintenance_topics, name='preventive_maintenance_topics'),
+    path('api/properties/<str:property_id>/is_preventivemaintenance/', 
+     views.property_is_preventivemaintenance, 
+     name='property_is_preventivemaintenance'),
+    # Direct path for is_preventivemaintenance (with trailing slash)
+path('api/properties/<str:property_id>/is_preventivemaintenance/', 
+     views.property_is_preventivemaintenance, 
+     name='property_is_preventivemaintenance'),
+     
+# Direct path for is_preventivemaintenance (without trailing slash)
+path('api/properties/<str:property_id>/is_preventivemaintenance', 
+     views.property_is_preventivemaintenance, 
+     name='property_is_preventivemaintenance_no_slash'),
 ]

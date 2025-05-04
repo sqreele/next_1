@@ -12,22 +12,51 @@ class RoomSerializer(serializers.ModelSerializer):
         model = Room
         fields = '__all__'
 
-
+class PropertyPMStatusSerializer(serializers.ModelSerializer):
+    """Serializer for property preventive maintenance status endpoint"""
+    is_preventivemaintenance = serializers.BooleanField(read_only=True)
+    
+    class Meta:
+        model = Property
+        fields = ['property_id', 'is_preventivemaintenance']
 class PropertySerializer(serializers.ModelSerializer):
     rooms = RoomSerializer(many=True, read_only=True)
 
     class Meta:
         model = Property
         fields = [
-            'id',
+            'id'
             'property_id',
             'name',
             'description',
             'users',
             'created_at',
             'rooms',
+            'is_preventivemaintenance',
         ]
-        read_only_fields = ['created_at']
+        read_only_fields = ['created_at', 'is_preventivemaintenance']
+    def get_rooms(self, obj):
+        """Get rooms for this property"""
+        from .serializers import RoomSerializer  # Import here to avoid circular import
+        rooms = obj.rooms.all()
+        return RoomSerializer(rooms, many=True, context=self.context).data   
+    def get_is_preventivemaintenance(self, obj):
+        """
+        Check if this property has any preventive maintenance jobs
+        Only calculated if explicitly requested to avoid extra queries
+        """
+        # Check if we need to calculate PM status
+        calculate_pm = self.context.get('calculate_pm', False)
+        if not calculate_pm:
+            return None
+            
+        # Get the PM status as efficiently as possible
+        has_pm_jobs = Job.objects.filter(
+            rooms__property=obj,
+            is_preventivemaintenance=True
+        ).exists()
+        
+        return has_pm_jobs   
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
