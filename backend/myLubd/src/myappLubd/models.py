@@ -55,6 +55,7 @@ class Property(models.Model):
     description = models.TextField(blank=True, null=True)
     users = models.ManyToManyField(User, related_name='accessible_properties')
     created_at = models.DateTimeField(auto_now_add=True)
+    is_preventivemaintenance=models.BooleanField(default=False)
 
     class Meta:
         ordering = ['name']
@@ -272,7 +273,7 @@ class Job(models.Model):
         blank=True
     )
     is_defective = models.BooleanField(default=False)
-    is_preventivemaintenance = models.BooleanField(default=False)
+    
     images = models.ManyToManyField(
         'JobImage', 
         related_name='jobs', 
