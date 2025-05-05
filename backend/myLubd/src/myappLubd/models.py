@@ -14,7 +14,137 @@ from django.dispatch import receiver
 
 
 
+class PreventiveMaintenance(models.Model):
+    FREQUENCY_CHOICES = [
+        ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
+        ('monthly', 'Monthly'),
+        ('quarterly', 'Quarterly'),
+        ('semi_annual', 'Semi-Annual'),
+        ('annual', 'Annual'),
+        ('custom', 'Custom'),
+    ]
 
+    pm_id = models.CharField(
+        max_length=16,
+        unique=True,
+        blank=True,
+        editable=False
+    )
+    job = models.ForeignKey(
+        'Job',  # Use string reference to avoid circular import
+        on_delete=models.CASCADE,
+        related_name='preventive_maintenances',
+        help_text="The related maintenance job"
+    )
+    scheduled_date = models.DateTimeField()
+    completed_date = models.DateTimeField(null=True, blank=True)
+    frequency = models.CharField(
+        max_length=20,
+        choices=FREQUENCY_CHOICES,
+        default='monthly'
+    )
+    custom_days = models.PositiveIntegerField(
+        null=True, 
+        blank=True, 
+        help_text="Custom frequency in days, if frequency is set to 'custom'"
+    )
+    next_due_date = models.DateTimeField(null=True, blank=True)
+    before_image = models.ForeignKey(
+        'JobImage',  # Use string reference
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pm_before_images'
+    )
+    after_image = models.ForeignKey(
+        'JobImage',  # Use string reference
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pm_after_images'
+    )
+    notes = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_preventive_maintenances'
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-scheduled_date']
+        verbose_name = 'Preventive Maintenance'
+        verbose_name_plural = 'Preventive Maintenances'
+        indexes = [
+            models.Index(fields=['scheduled_date', 'next_due_date']),
+            models.Index(fields=['frequency']),
+        ]
+
+    def __str__(self):
+        return f"PM {self.pm_id} - {self.job.job_id}"
+
+    def save(self, *args, **kwargs):
+        # Generate PM ID if not set
+        if not self.pm_id:
+            timestamp = timezone.now().strftime('%y')
+            unique_id = get_random_string(length=6, allowed_chars='0123456789ABCDEF')
+            self.pm_id = f"pm{timestamp}{unique_id}"
+            
+        # Calculate next due date based on frequency
+        if self.completed_date and not self.next_due_date:
+            self.calculate_next_due_date()
+            
+        super().save(*args, **kwargs)
+
+    def calculate_next_due_date(self):
+        """Calculate the next due date based on frequency"""
+        if not self.completed_date:
+            return
+            
+        base_date = self.completed_date
+        
+        if self.frequency == 'daily':
+            self.next_due_date = base_date + timezone.timedelta(days=1)
+        elif self.frequency == 'weekly':
+            self.next_due_date = base_date + timezone.timedelta(weeks=1)
+        elif self.frequency == 'monthly':
+            # Add one month (approximately)
+            month = base_date.month + 1
+            year = base_date.year
+            if month > 12:
+                month = 1
+                year += 1
+            # Handle different month lengths
+            day = min(base_date.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 
+                                     31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month-1])
+            self.next_due_date = base_date.replace(year=year, month=month, day=day)
+        elif self.frequency == 'quarterly':
+            # Add three months
+            month = base_date.month + 3
+            year = base_date.year
+            if month > 12:
+                month -= 12
+                year += 1
+            day = min(base_date.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 
+                                     31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month-1])
+            self.next_due_date = base_date.replace(year=year, month=month, day=day)
+        elif self.frequency == 'semi_annual':
+            # Add six months
+            month = base_date.month + 6
+            year = base_date.year
+            if month > 12:
+                month -= 12
+                year += 1
+            day = min(base_date.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 
+                                     31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month-1])
+            self.next_due_date = base_date.replace(year=year, month=month, day=day)
+        elif self.frequency == 'annual':
+            # Add one year
+            self.next_due_date = base_date.replace(year=base_date.year + 1)
+        elif self.frequency == 'custom' and self.custom_days:
+            # Add custom number of days
+            self.next_due_date = base_date + timezone.timedelta(days=self.custom_days)
 def get_upload_path(instance, filename):
     """Generate a unique path for uploaded files"""
     ext = Path(filename).suffix
@@ -319,6 +449,21 @@ class Job(models.Model):
         timestamp = timezone.now().strftime('%y')
         unique_id = get_random_string(length=6, allowed_chars='0123456789ABCDEF')
         return f"j{timestamp}{unique_id}"
+    def create_preventive_maintenance(self, scheduled_date, frequency='monthly', created_by=None):
+        """Create a preventive maintenance schedule for this job"""
+        if not self.is_preventivemaintenance:
+            self.is_preventivemaintenance = True
+            self.save()
+            
+        # Import here to avoid circular import issues
+        from .models import PreventiveMaintenance
+        
+        return PreventiveMaintenance.objects.create(
+            job=self,
+            scheduled_date=scheduled_date,
+            frequency=frequency,
+            created_by=created_by or self.user
+        )
 
 
 class UserProfile(models.Model):
@@ -467,3 +612,5 @@ class Session(models.Model):
 
     def __str__(self):
         return f"Session for {self.user.username} - Expires: {self.expires_at}"
+    
+    

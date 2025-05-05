@@ -8,11 +8,24 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from google.oauth2 import id_token
 from google.auth.transport import requests
-from .models import UserProfile, Property, Room, Topic, Job, Session
+from django.utils import timezone
+from .models import UserProfile, Property, Room, Topic, Job, Session,PreventiveMaintenance
 from .serializers import (
     UserProfileSerializer, PropertySerializer, RoomSerializer, TopicSerializer, JobSerializer,
     UserSerializer  # Added for RegisterView
 )
+from .serializers import (
+    PreventiveMaintenanceSerializer,
+    PreventiveMaintenanceCreateUpdateSerializer,
+    PreventiveMaintenanceCompleteSerializer,
+    PreventiveMaintenanceListSerializer,
+    PropertyPMStatusSerializer
+)
+
+from rest_framework import viewsets, status, permissions
+from django.shortcuts import get_object_or_404
+from django.db.models import Q, Count
+
 import logging
 import json
 import uuid
@@ -22,8 +35,272 @@ from django.shortcuts import get_object_or_404
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
+class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
+    """Viewset for Preventive Maintenance records"""
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'pm_id'
+    
+    def get_queryset(self):
+        queryset = PreventiveMaintenance.objects.all()
+        
+        # Filter by job_id if provided
+        job_id = self.request.query_params.get('job_id')
+        if job_id:
+            queryset = queryset.filter(job__job_id=job_id)
+        
+        # Filter by frequency if provided
+        frequency = self.request.query_params.get('frequency')
+        if frequency:
+            queryset = queryset.filter(frequency=frequency)
+        
+        # Filter by status (completed/pending)
+        status = self.request.query_params.get('status')
+        if status == 'completed':
+            queryset = queryset.filter(completed_date__isnull=False)
+        elif status == 'pending':
+            queryset = queryset.filter(completed_date__isnull=True)
+        elif status == 'overdue':
+            queryset = queryset.filter(
+                scheduled_date__lt=timezone.now(),
+                completed_date__isnull=True
+            )
+        
+        # Filter by date range
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date:
+            queryset = queryset.filter(scheduled_date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(scheduled_date__lte=end_date)
+        
+        return queryset.select_related(
+            'job', 'created_by', 'before_image', 'after_image'
+        )
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return PreventiveMaintenanceListSerializer
+        elif self.action in ['create', 'update', 'partial_update']:
+            return PreventiveMaintenanceCreateUpdateSerializer
+        elif self.action == 'complete':
+            return PreventiveMaintenanceCompleteSerializer
+        return PreventiveMaintenanceSerializer
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pm_id=None):
+        """Mark a preventive maintenance task as completed"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        
+        # Return full serialized data
+        return Response(
+            PreventiveMaintenanceSerializer(
+                instance, 
+                context={'request': request}
+            ).data
+        )
+    
+    @action(detail=False)
+    def upcoming(self, request):
+        """List upcoming maintenance tasks"""
+        # Default to 30 days, but allow override
+        days = request.query_params.get('days', 30)
+        try:
+            days = int(days)
+        except ValueError:
+            days = 30
+        
+        end_date = timezone.now() + timezone.timedelta(days=days)
+        
+        queryset = PreventiveMaintenance.objects.filter(
+            scheduled_date__lte=end_date,
+            completed_date__isnull=True
+        ).select_related('job', 'created_by', 'before_image', 'after_image')
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = PreventiveMaintenanceSerializer(
+                page, 
+                many=True, 
+                context={'request': request}
+            )
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = PreventiveMaintenanceSerializer(
+            queryset, 
+            many=True, 
+            context={'request': request}
+        )
+        return Response(serializer.data)
+    
+    @action(detail=False)
+    def overdue(self, request):
+        """List overdue maintenance tasks"""
+        queryset = PreventiveMaintenance.objects.filter(
+            scheduled_date__lt=timezone.now(),
+            completed_date__isnull=True
+        ).select_related('job', 'created_by', 'before_image', 'after_image')
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = PreventiveMaintenanceSerializer(
+                page, 
+                many=True, 
+                context={'request': request}
+            )
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = PreventiveMaintenanceSerializer(
+            queryset, 
+            many=True, 
+            context={'request': request}
+        )
+        return Response(serializer.data)
 
-# ViewSets
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_data(request):
+    """Get statistics and overview of preventive maintenance"""
+    
+    # Get counts
+    total_pm = PreventiveMaintenance.objects.count()
+    completed_pm = PreventiveMaintenance.objects.filter(completed_date__isnull=False).count()
+    pending_pm = PreventiveMaintenance.objects.filter(completed_date__isnull=True).count()
+    overdue_pm = PreventiveMaintenance.objects.filter(
+        scheduled_date__lt=timezone.now(),
+        completed_date__isnull=True
+    ).count()
+    
+    # Get frequency distribution
+    frequency_counts = PreventiveMaintenance.objects.values('frequency').annotate(
+        count=Count('frequency')
+    ).order_by('frequency')
+    
+    # Get upcoming maintenance tasks (next 30 days)
+    end_date = timezone.now() + timezone.timedelta(days=30)
+    upcoming = PreventiveMaintenance.objects.filter(
+        scheduled_date__lte=end_date,
+        completed_date__isnull=True
+    ).select_related('job').order_by('scheduled_date')[:5]
+    
+    upcoming_serialized = PreventiveMaintenanceListSerializer(
+        upcoming, 
+        many=True,
+        context={'request': request}
+    ).data
+    
+    return Response({
+        'counts': {
+            'total': total_pm,
+            'completed': completed_pm,
+            'pending': pending_pm,
+            'overdue': overdue_pm
+        },
+        'frequency_distribution': list(frequency_counts),
+        'upcoming': upcoming_serialized
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_jobs(request):
+    """Get jobs marked for preventive maintenance"""
+    
+    jobs = Job.objects.filter(is_preventivemaintenance=True)
+    
+    # Apply filters if provided
+    status = request.query_params.get('status')
+    if status:
+        jobs = jobs.filter(status=status)
+    
+    priority = request.query_params.get('priority')
+    if priority:
+        jobs = jobs.filter(priority=priority)
+    
+    # Get JobSerializer from your existing code
+    from .serializers import JobSerializer
+    
+    serializer = JobSerializer(
+        jobs,
+        many=True,
+        context={'request': request}
+    )
+    
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_rooms(request):
+    """Get rooms with preventive maintenance jobs"""
+    
+    # Find rooms with preventive maintenance jobs
+    rooms = Room.objects.filter(
+        jobs__is_preventivemaintenance=True
+    ).distinct()
+    
+    # Get RoomSerializer from your existing code
+    from .serializers import RoomSerializer
+    
+    serializer = RoomSerializer(
+        rooms,
+        many=True,
+        context={'request': request}
+    )
+    
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_preventive_maintenance_topics(request):
+    """Get topics used in preventive maintenance jobs"""
+    
+    # Find topics used in preventive maintenance jobs
+    topics = Topic.objects.filter(
+        jobs__is_preventivemaintenance=True
+    ).distinct()
+    
+    # Get TopicSerializer from your existing code
+    from .serializers import TopicSerializer
+    
+    serializer = TopicSerializer(
+        topics,
+        many=True,
+        context={'request': request}
+    )
+    
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def property_is_preventivemaintenance(request, property_id):
+    """Check if a property has preventive maintenance jobs"""
+    
+    # Get the property
+    property_instance = get_object_or_404(Property, property_id=property_id)
+    
+    # Check if property has any PM jobs
+    has_pm_jobs = Job.objects.filter(
+        rooms__properties=property_instance,
+        is_preventivemaintenance=True
+    ).exists()
+    
+    # Update the property field
+    if property_instance.is_preventivemaintenance != has_pm_jobs:
+        property_instance.is_preventivemaintenance = has_pm_jobs
+        property_instance.save()
+    
+    # Serialize and return
+    serializer = PropertyPMStatusSerializer(property_instance)
+    return Response(serializer.data)
 class RoomViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Room.objects.all()
@@ -884,4 +1161,5 @@ def get_preventive_maintenance_topics(request):
         return Response(
             {"detail": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )   
+        )
+           

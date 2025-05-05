@@ -24,7 +24,7 @@ router.register(r'topics', TopicViewSet)
 router.register(r'jobs', JobViewSet)
 router.register(r'properties', PropertyViewSet)
 router.register(r'user-profiles', UserProfileViewSet)
-
+router.register(r'preventive-maintenance', views.PreventiveMaintenanceViewSet, basename='preventive-maintenance')
 # Define the URL patterns
 urlpatterns = [
     # Include API routes under the 'api/' path
@@ -57,4 +57,8 @@ path('api/properties/<str:property_id>/is_preventivemaintenance/',
 path('api/properties/<str:property_id>/is_preventivemaintenance', 
      views.property_is_preventivemaintenance, 
      name='property_is_preventivemaintenance_no_slash'),
+    path('api/jobs/<str:job_id>/preventive-maintenance/', 
+         views.PreventiveMaintenanceViewSet.as_view({'get': 'list', 'post': 'create'}), 
+         name='job-preventive-maintenance'),
 ]
+
