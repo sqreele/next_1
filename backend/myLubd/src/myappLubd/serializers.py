@@ -256,7 +256,148 @@ class SessionSerializer(serializers.ModelSerializer):
             'created_at',
         ]
         read_only_fields = ['created_at']
+class PreventiveMaintenanceListSerializer(serializers.ModelSerializer):
+    job_id = serializers.CharField(source='job.job_id', read_only=True)
+    job_description = serializers.CharField(source='job.description', read_only=True)
+    status = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PreventiveMaintenance
+        fields = [
+            'pm_id', 'job_id', 'job_description', 
+            'scheduled_date', 'completed_date', 'frequency',
+            'next_due_date', 'status'
+        ]
+    
+    def get_status(self, obj):
+        if obj.completed_date:
+            return 'completed'
+        elif obj.scheduled_date < timezone.now():
+            return 'overdue'
+        else:
+            return 'pending'
+
 class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
+    job_description = serializers.CharField(source='job.description', read_only=True)
+    creator_name = serializers.CharField(source='created_by.username', read_only=True)
+    before_image = JobImageSerializer(read_only=True)
+    after_image = JobImageSerializer(read_only=True)
+    
+    class Meta:
+        model = PreventiveMaintenance
+        fields = [
+            'pm_id', 'job', 'job_description', 'scheduled_date',
+            'completed_date', 'frequency', 'custom_days',
+            'next_due_date', 'before_image', 'after_image',
+            'notes', 'created_by', 'creator_name', 'updated_at'
+        ]
+        read_only_fields = ['pm_id', 'created_by', 'updated_at']
+
+class PreventiveMaintenanceCreateUpdateSerializer(serializers.ModelSerializer):
+    before_image_file = serializers.ImageField(required=False, write_only=True)
+    after_image_file = serializers.ImageField(required=False, write_only=True)
+    before_image_id = serializers.PrimaryKeyRelatedField(
+        write_only=True, 
+        queryset=JobImage.objects.all(), 
+        required=False, 
+        source='before_image'
+    )
+    after_image_id = serializers.PrimaryKeyRelatedField(
+        write_only=True, 
+        queryset=JobImage.objects.all(), 
+        required=False, 
+        source='after_image'
+    )
+    topics = serializers.PrimaryKeyRelatedField(
+        queryset=Topic.objects.all(), 
+        many=True, 
+        required=False
+    )
+    
+    class Meta:
+        model = PreventiveMaintenance
+        fields = [
+            'job', 'scheduled_date', 'frequency', 'custom_days',
+            'completed_date', 'next_due_date', 'notes',
+            'before_image_file', 'after_image_file',
+            'before_image_id', 'after_image_id', 'topics'
+        ]
+    
+    def validate(self, data):
+        # Validate frequency and custom_days
+        if data.get('frequency') == 'custom' and not data.get('custom_days'):
+            raise serializers.ValidationError(
+                "Custom days are required when frequency is set to 'custom'"
+            )
+        return data
+    
+    def create(self, validated_data):
+        # Remove file fields as they're handled separately
+        before_image_file = validated_data.pop('before_image_file', None)
+        after_image_file = validated_data.pop('after_image_file', None)
+        topics = validated_data.pop('topics', [])
+        
+        # Create the PM
+        pm = PreventiveMaintenance.objects.create(**validated_data)
+        
+        # Add topics
+        if topics:
+            pm.topics.set(topics)
+        
+        return pm
+    
+    def update(self, instance, validated_data):
+        # Remove file fields as they're handled separately
+        before_image_file = validated_data.pop('before_image_file', None)
+        after_image_file = validated_data.pop('after_image_file', None)
+        topics = validated_data.pop('topics', None)
+        
+        # Update the instance
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # Handle topics if provided
+        if topics is not None:
+            instance.topics.set(topics)
+        
+        # Recalculate next_due_date if completed_date changed
+        if 'completed_date' in validated_data and instance.completed_date and not instance.next_due_date:
+            instance.calculate_next_due_date()
+        
+        instance.save()
+        return instance
+
+class PreventiveMaintenanceCompleteSerializer(serializers.ModelSerializer):
+    before_image_file = serializers.ImageField(required=False, write_only=True)
+    after_image_file = serializers.ImageField(required=False, write_only=True)
+    notes = serializers.CharField(required=False)
+    
+    class Meta:
+        model = PreventiveMaintenance
+        fields = ['completed_date', 'notes', 'before_image_file', 'after_image_file']
+    
+    def update(self, instance, validated_data):
+        # Set completed date if not provided
+        if 'completed_date' not in validated_data or not validated_data['completed_date']:
+            validated_data['completed_date'] = timezone.now()
+        
+        # Update the instance
+        for attr, value in validated_data.items():
+            if attr not in ['before_image_file', 'after_image_file']:
+                setattr(instance, attr, value)
+        
+        # Calculate next due date
+        instance.calculate_next_due_date()
+        instance.save()
+        
+        return instance
+
+class PropertyPMStatusSerializer(serializers.ModelSerializer):
+    is_preventivemaintenance = serializers.BooleanField()
+    
+    class Meta:
+        model = Property
+        fields = ['property_id', 'name', 'is_preventivemaintenance']
     job = serializers.SlugRelatedField(
         slug_field='job_id',
         queryset=Job.objects.all()

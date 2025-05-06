@@ -39,6 +39,205 @@ class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
     """Viewset for Preventive Maintenance records"""
     permission_classes = [IsAuthenticated]
     lookup_field = 'pm_id'
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    
+    def get_queryset(self):
+        queryset = PreventiveMaintenance.objects.all()
+        
+        # Filter by job_id if provided
+        job_id = self.request.query_params.get('job_id')
+        if job_id:
+            queryset = queryset.filter(job__job_id=job_id)
+        
+        # Filter by frequency if provided
+        frequency = self.request.query_params.get('frequency')
+        if frequency:
+            queryset = queryset.filter(frequency=frequency)
+        
+        # Filter by status (completed/pending)
+        status = self.request.query_params.get('status')
+        if status == 'completed':
+            queryset = queryset.filter(completed_date__isnull=False)
+        elif status == 'pending':
+            queryset = queryset.filter(completed_date__isnull=True)
+        elif status == 'overdue':
+            queryset = queryset.filter(
+                scheduled_date__lt=timezone.now(),
+                completed_date__isnull=True
+            )
+        
+        # Filter by date range
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date:
+            queryset = queryset.filter(scheduled_date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(scheduled_date__lte=end_date)
+        
+        return queryset.select_related(
+            'job', 'created_by', 'before_image', 'after_image'
+        )
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return PreventiveMaintenanceListSerializer
+        elif self.action in ['create', 'update', 'partial_update']:
+            return PreventiveMaintenanceCreateUpdateSerializer
+        elif self.action == 'complete':
+            return PreventiveMaintenanceCompleteSerializer
+        return PreventiveMaintenanceSerializer
+    
+    def perform_create(self, serializer):
+        pm = serializer.save(created_by=self.request.user)
+        
+        # Handle image uploads
+        self._process_image_upload(pm, 'before_image')
+        self._process_image_upload(pm, 'after_image')
+    
+    def perform_update(self, serializer):
+        pm = serializer.save()
+        
+        # Handle image uploads
+        self._process_image_upload(pm, 'before_image')
+        self._process_image_upload(pm, 'after_image')
+    
+    def _process_image_upload(self, pm, image_type):
+        """Helper method to process image uploads"""
+        # Check if image is in request data
+        image_key = f'{image_type}_file'
+        if image_key in self.request.data and self.request.data[image_key]:
+            # Get the image file from request
+            image_file = self.request.data[image_key]
+            
+            # Create a new JobImage
+            job_image = JobImage(
+                job=pm.job,
+                image=image_file,
+                uploaded_by=self.request.user
+            )
+            job_image.save()
+            
+            # Link the JobImage to the PreventiveMaintenance record
+            setattr(pm, image_type, job_image)
+            pm.save(update_fields=[image_type])
+    
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pm_id=None):
+        """Mark a preventive maintenance task as completed"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        pm = serializer.save()
+        
+        # Handle image uploads
+        self._process_image_upload(pm, 'before_image')
+        self._process_image_upload(pm, 'after_image')
+        
+        # Return full serialized data
+        return Response(
+            PreventiveMaintenanceSerializer(
+                instance, 
+                context={'request': request}
+            ).data
+        )
+    
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_before_image(self, request, pm_id=None):
+        """Upload before image for a PM task"""
+        return self._upload_image(request, pm_id, 'before_image')
+    
+    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
+    def upload_after_image(self, request, pm_id=None):
+        """Upload after image for a PM task"""
+        return self._upload_image(request, pm_id, 'after_image')
+    
+    def _upload_image(self, request, pm_id, image_type):
+        """Helper method to upload images"""
+        pm = self.get_object()
+        
+        if 'image' not in request.data:
+            return Response({'error': 'No image provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create new JobImage
+        job_image = JobImage.objects.create(
+            job=pm.job,
+            image=request.data['image'],
+            uploaded_by=request.user
+        )
+        
+        # Link the image to the PM
+        previous_image = getattr(pm, image_type)
+        if previous_image:
+            # Optionally delete the previous image if needed
+            # previous_image.delete()
+            pass
+        
+        setattr(pm, image_type, job_image)
+        pm.save(update_fields=[image_type])
+        
+        # Return the updated PM record
+        serializer = PreventiveMaintenanceSerializer(pm, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    @action(detail=False)
+    def upcoming(self, request):
+        """List upcoming maintenance tasks"""
+        # Default to 30 days, but allow override
+        days = request.query_params.get('days', 30)
+        try:
+            days = int(days)
+        except ValueError:
+            days = 30
+        
+        end_date = timezone.now() + timezone.timedelta(days=days)
+        
+        queryset = PreventiveMaintenance.objects.filter(
+            scheduled_date__lte=end_date,
+            completed_date__isnull=True
+        ).select_related('job', 'created_by', 'before_image', 'after_image')
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = PreventiveMaintenanceSerializer(
+                page, 
+                many=True, 
+                context={'request': request}
+            )
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = PreventiveMaintenanceSerializer(
+            queryset, 
+            many=True, 
+            context={'request': request}
+        )
+        return Response(serializer.data)
+    
+    @action(detail=False)
+    def overdue(self, request):
+        """List overdue maintenance tasks"""
+        queryset = PreventiveMaintenance.objects.filter(
+            scheduled_date__lt=timezone.now(),
+            completed_date__isnull=True
+        ).select_related('job', 'created_by', 'before_image', 'after_image')
+        
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = PreventiveMaintenanceSerializer(
+                page, 
+                many=True, 
+                context={'request': request}
+            )
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = PreventiveMaintenanceSerializer(
+            queryset, 
+            many=True, 
+            context={'request': request}
+        )
+        return Response(serializer.data)
+    """Viewset for Preventive Maintenance records"""
+    permission_classes = [IsAuthenticated]
+    lookup_field = 'pm_id'
     
     def get_queryset(self):
         queryset = PreventiveMaintenance.objects.all()
