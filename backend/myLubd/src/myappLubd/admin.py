@@ -121,7 +121,7 @@ class JobImageAdmin(admin.ModelAdmin):
     def job_link(self, obj):
         if obj.job:
             from django.urls import reverse
-            link = reverse("admin:YOUR_APP_NAME_job_change", args=[obj.job.id]) # Replace YOUR_APP_NAME
+            link = reverse("admin:myappLubd_job_change", args=[obj.job.id])  # FIXED: Replaced YOUR_APP_NAME with myappLubd
             return format_html('<a href="{}">{}</a>', link, obj.job.job_id)
         return "No Associated Job"
     job_link.short_description = 'Job'
@@ -273,7 +273,7 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
     def get_job_id_link(self, obj):
         if obj.job:
             from django.urls import reverse
-            link = reverse("admin:YOUR_APP_NAME_job_change", args=[obj.job.id]) # Replace YOUR_APP_NAME
+            link = reverse("admin:myappLubd_job_change", args=[obj.job.id])  # FIXED: Replaced YOUR_APP_NAME with myappLubd
             return format_html('<a href="{}">{}</a>', link, obj.job.job_id)
         return "N/A"
     get_job_id_link.short_description = 'Job ID'
