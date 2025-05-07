@@ -62,7 +62,7 @@ path('api/properties/<str:property_id>/is_preventivemaintenance',
          name='job-preventive-maintenance'),
    
     # Your existing paths...
-    path('api-auth/', include('rest_framework.urls')),
+    path('api/api-auth/', include('rest_framework.urls')),
 ]
 
 
