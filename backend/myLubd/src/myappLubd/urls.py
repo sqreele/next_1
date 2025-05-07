@@ -60,5 +60,9 @@ path('api/properties/<str:property_id>/is_preventivemaintenance',
     path('api/jobs/<str:job_id>/preventive-maintenance/', 
          views.PreventiveMaintenanceViewSet.as_view({'get': 'list', 'post': 'create'}), 
          name='job-preventive-maintenance'),
+   
+    # Your existing paths...
+    path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
 ]
+
 
