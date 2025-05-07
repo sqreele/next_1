@@ -1,10 +1,10 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
-from .views import RoomViewSet, TopicViewSet, JobViewSet, PropertyViewSet, UserProfileViewSet
+from .views import RoomViewSet, TopicViewSet, JobViewSet, PropertyViewSet, UserProfileViewSet,UserViewSet
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
-    TokenRefreshView,
+    TokenRefreshView
 )
 from django.http import HttpResponse
 
@@ -19,6 +19,8 @@ def health_check(request):
 
 # Create a router and register viewsets
 router = DefaultRouter()
+
+router.register(r'users', UserViewSet)
 router.register(r'rooms', RoomViewSet)
 router.register(r'topics', TopicViewSet)
 router.register(r'jobs', JobViewSet)
@@ -62,7 +64,7 @@ path('api/properties/<str:property_id>/is_preventivemaintenance',
          name='job-preventive-maintenance'),
    
     # Your existing paths...
-    path('api/api-auth/', include('rest_framework.urls')),
+    path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))
 ]
 
 

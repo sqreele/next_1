@@ -568,3 +568,8 @@ class PreventiveMaintenanceCompleteSerializer(serializers.ModelSerializer):
         instance.save()
         
         return instance
+class UserSerializer(serializers.HyperlinkedModelSerializer): 
+        class Meta:
+            model = User
+            fields = ['url', 'username', 'email', 'is_staff']
+    
