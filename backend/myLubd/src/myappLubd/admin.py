@@ -9,16 +9,16 @@ from .models import (
     JobImage,
     UserProfile,
     PreventiveMaintenance,
-    Session  # Added Session model
+    Session
 )
 
 # Inlines
 
 class JobImageInline(admin.TabularInline):
     model = JobImage
-    extra = 1  # Allow adding one new image by default, can be 0
-    readonly_fields = ['image_preview', 'uploaded_at'] # uploaded_by will be set in JobAdmin.save_formset
-    fields = ['image', 'image_preview', 'uploaded_by', 'uploaded_at'] # Explicitly order and include uploaded_by
+    extra = 1
+    readonly_fields = ['image_preview', 'uploaded_at']
+    fields = ['image', 'image_preview', 'uploaded_by', 'uploaded_at']
 
     def image_preview(self, obj):
         if obj.image and hasattr(obj.image, 'url'):
@@ -31,10 +31,10 @@ class PreventiveMaintenanceInline(admin.TabularInline):
     model = PreventiveMaintenance
     extra = 0
     fields = ('pm_id', 'scheduled_date', 'frequency', 'custom_days', 'completed_date', 'next_due_date', 'created_by')
-    readonly_fields = ('pm_id', 'next_due_date') # created_by will be set in JobAdmin.save_formset
-    raw_id_fields = ('created_by',) # For better user selection if many users
+    readonly_fields = ('pm_id', 'next_due_date')
+    raw_id_fields = ('created_by',)
     show_change_link = True
-    can_delete = True # Usually good to allow deletion of inlines
+    can_delete = True
     max_num = 10
     verbose_name = "Preventive Maintenance Schedule"
     verbose_name_plural = "Preventive Maintenance Schedules"
@@ -49,16 +49,16 @@ class JobAdmin(admin.ModelAdmin):
     search_fields = ['job_id', 'description', 'user__username', 'updated_by__username', 'topics__title']
     readonly_fields = ['job_id', 'created_at', 'updated_at', 'completed_at', 'updated_by']
     filter_horizontal = ['rooms', 'topics']
-    inlines = [JobImageInline, PreventiveMaintenanceInline]  # Added PreventiveMaintenanceInline
+    inlines = [JobImageInline, PreventiveMaintenanceInline]
     fieldsets = (
         ('Job Info', {
             'fields': ('job_id', 'description', 'remarks', 'status', 'priority', 'is_defective', 'is_preventivemaintenance')
         }),
-        ('Assignment', { # Renamed from 'Users' for clarity
+        ('Assignment', {
             'fields': ('user', 'updated_by')
         }),
         ('Related Items', {
-            'fields': ('rooms', 'topics') # Note: Job.images M2M is not included here, managed by JobImageInline
+            'fields': ('rooms', 'topics')
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at', 'completed_at')
@@ -101,7 +101,6 @@ class JobAdmin(admin.ModelAdmin):
             job_instance.save(update_fields=['is_preventivemaintenance'])
             
         formset.save_m2m()
-        # super().save_formset(request, form, formset, change) # If issues with older Django or complex m2m in formset models
 
 
 @admin.register(JobImage)
@@ -110,7 +109,7 @@ class JobImageAdmin(admin.ModelAdmin):
     list_filter = ('uploaded_at', 'uploaded_by')
     search_fields = ('job__job_id', 'uploaded_by__username')
     readonly_fields = ('image_preview', 'uploaded_at')
-    raw_id_fields = ('job', 'uploaded_by') # Makes selection easier for ForeignKey fields
+    raw_id_fields = ('job', 'uploaded_by')
 
     def image_preview(self, obj):
         if obj.image and hasattr(obj.image, 'url'):
@@ -121,7 +120,7 @@ class JobImageAdmin(admin.ModelAdmin):
     def job_link(self, obj):
         if obj.job:
             from django.urls import reverse
-            link = reverse("admin:myappLubd_job_change", args=[obj.job.id])  # FIXED: Replaced YOUR_APP_NAME with myappLubd
+            link = reverse("admin:myappLubd_job_change", args=[obj.job.id])
             return format_html('<a href="{}">{}</a>', link, obj.job.job_id)
         return "No Associated Job"
     job_link.short_description = 'Job'
@@ -163,6 +162,7 @@ class HasPreventiveMaintenanceFilter(admin.SimpleListFilter):
             return queryset.exclude(jobs__is_preventivemaintenance=True).distinct()
         return queryset
 
+
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
     list_display = ['room_id', 'name', 'room_type', 'is_active', 'created_at', 'get_properties_display']
@@ -191,7 +191,7 @@ class RoomAdmin(admin.ModelAdmin):
 class TopicAdmin(admin.ModelAdmin):
     list_display = ['title', 'get_jobs_count']
     search_fields = ['title', 'description']
-    list_filter = [HasPreventiveMaintenanceFilter] # Added filter
+    list_filter = [HasPreventiveMaintenanceFilter]
 
     def get_jobs_count(self, obj):
         return obj.jobs.count()
@@ -207,12 +207,12 @@ class UserProfileAdmin(admin.ModelAdmin):
     readonly_fields = [
         'profile_image_preview', 'google_id', 'email_verified', 
         'access_token', 'refresh_token', 'login_provider'
-    ] # Made Google OAuth fields readonly
+    ]
     fieldsets = (
         (None, {'fields': ('user', 'positions', 'profile_image', 'profile_image_preview')}),
         ('Accessible Properties', {'fields': ('properties',)}),
         ('Google Authentication Details', {
-            'classes': ('collapse',), # Collapsible section
+            'classes': ('collapse',),
             'fields': ('google_id', 'email_verified', 'access_token', 'refresh_token', 'login_provider'),
         }),
     )
@@ -234,29 +234,26 @@ class UserProfileAdmin(admin.ModelAdmin):
 class PreventiveMaintenanceAdmin(admin.ModelAdmin):
     list_display = (
         'pm_id',
-        'get_job_id_link', # Changed to link
-        'get_topics_for_job', # Added topics from related job
+        'get_job_id_link',
+        'get_topics_for_job',
         'scheduled_date',
         'completed_date',
         'frequency',
         'next_due_date',
-        'get_status_display', # Renamed for clarity
-        'created_by_user' # Added created_by
+        'get_status_display',
+        'created_by_user'
     )
     list_filter = (
         'frequency',
-        ('completed_date', admin.EmptyFieldListFilter), # Checks if field is null or not
+        ('completed_date', admin.EmptyFieldListFilter),
         'scheduled_date',
         'next_due_date',
-        'job__is_preventivemaintenance' # Filter by job's PM status
+        'job__is_preventivemaintenance'
     )
     search_fields = ('pm_id', 'job__job_id', 'notes', 'job__topics__title')
     date_hierarchy = 'scheduled_date'
-    # Assuming the second version of PreventiveMaintenance model (with FK to JobImage for before/after_image)
     raw_id_fields = ('job', 'before_image', 'after_image', 'created_by')
     readonly_fields = ('pm_id', 'next_due_date', 'before_image_preview', 'after_image_preview')
-    # Note: 'topics' field is not on PreventiveMaintenance model based on the second version of PM model.
-    # If it were, it would be: filter_horizontal = ('topics',)
     fieldsets = (
         ('Identification', {
             'fields': ('pm_id', 'job', 'created_by')
@@ -264,7 +261,7 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
         ('Schedule', {
             'fields': ('scheduled_date', 'frequency', 'custom_days', 'completed_date', 'next_due_date')
         }),
-        ('Documentation & Images', { # Added Images here
+        ('Documentation & Images', {
             'fields': ('notes', 'before_image', 'before_image_preview', 'after_image', 'after_image_preview')
         }),
     )
@@ -273,7 +270,7 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
     def get_job_id_link(self, obj):
         if obj.job:
             from django.urls import reverse
-            link = reverse("admin:myappLubd_job_change", args=[obj.job.id])  # FIXED: Replaced YOUR_APP_NAME with myappLubd
+            link = reverse("admin:myappLubd_job_change", args=[obj.job.id])
             return format_html('<a href="{}">{}</a>', link, obj.job.job_id)
         return "N/A"
     get_job_id_link.short_description = 'Job ID'
@@ -285,17 +282,16 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
         return "N/A"
     get_topics_for_job.short_description = 'Job Topics'
 
-
     def get_status_display(self, obj):
         if obj.completed_date:
             return format_html('<span style="color: green;">Completed</span>')
-        elif obj.scheduled_date and obj.scheduled_date < timezone.now().today(): # Use .date() for comparison if only date matters
+        elif obj.scheduled_date and obj.scheduled_date < timezone.now().date():
              return format_html('<span style="color: red;">Overdue</span>')
-        elif obj.next_due_date and obj.next_due_date < timezone.now().today():
+        elif obj.next_due_date and obj.next_due_date < timezone.now().date():
              return format_html('<span style="color: orange;">Next Due Overdue</span>')
         return format_html('<span style="color: blue;">Scheduled</span>')
     get_status_display.short_description = 'Status'
-    get_status_display.admin_order_field = 'completed_date' # Allows sorting by completion status
+    get_status_display.admin_order_field = 'completed_date'
 
     def created_by_user(self,obj):
         if obj.created_by:
@@ -315,7 +311,7 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
         # Ensure the related job is marked as preventive maintenance
         if obj.job and not obj.job.is_preventivemaintenance:
             obj.job.is_preventivemaintenance = True
-            obj.job.save(update_fields=['is_preventivemaintenance']) # Only update this field
+            obj.job.save(update_fields=['is_preventivemaintenance'])
             
         super().save_model(request, obj, form, change)
 
@@ -325,7 +321,7 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
         for pm in queryset:
             if not pm.completed_date:
                 pm.completed_date = now
-                pm.calculate_next_due_date() # This method is on the PM model
+                pm.calculate_next_due_date()
                 pm.save()
                 updated_count += 1
         self.message_user(request, f"{updated_count} preventive maintenance tasks marked as completed.")
@@ -363,5 +359,5 @@ class SessionAdmin(admin.ModelAdmin):
     
     def is_expired_status(self, obj):
         return obj.is_expired()
-    is_expired_status.boolean = True # Shows as a green check or red X
+    is_expired_status.boolean = True
     is_expired_status.short_description = 'Is Expired'

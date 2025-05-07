@@ -31,12 +31,7 @@ class PreventiveMaintenance(models.Model):
         blank=True,
         editable=False
     )
-    job = models.ForeignKey(
-        'Job',  # Use string reference to avoid circular import
-        on_delete=models.CASCADE,
-        related_name='preventive_maintenances',
-        help_text="The related maintenance job"
-    )
+
     # Add many-to-many relationship with Topic
     topics = models.ManyToManyField(
         'Topic',
