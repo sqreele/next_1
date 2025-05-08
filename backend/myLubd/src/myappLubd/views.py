@@ -42,12 +42,7 @@ from rest_framework.decorators import action
 from django.utils import timezone
 
 from .models import PreventiveMaintenance, JobImage
-from .serializers import (
-    PreventiveMaintenanceSerializer,
-    PreventiveMaintenanceListSerializer,
-    PreventiveMaintenanceCreateUpdateSerializer,
-    PreventiveMaintenanceCompleteSerializer,
-)
+
 
 
 class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):

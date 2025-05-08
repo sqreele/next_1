@@ -258,49 +258,26 @@ class SessionSerializer(serializers.ModelSerializer):
 
 # ----- Preventive Maintenance Serializers -----
 
-
-
-class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
-    """Serializer for list view (with fewer fields)"""
-    pmtitle =serializers.SerializerMethodField()
-    is_overdue = serializers.SerializerMethodField()
-    topics = TopicSerializer(many=True, read_only=True)
-    created_by = UserSerializer(read_only=True)
-    days_remaining = serializers.SerializerMethodField()
+class PreventiveMaintenanceListSerializer(serializers.ModelSerializer):
+    """Lighter serializer for listing preventive maintenance records"""
+    job_id = serializers.CharField(source='job.job_id')
+    job_description = serializers.CharField(source='job.description', read_only=True)
+    status = serializers.SerializerMethodField()
     
     class Meta:
         model = PreventiveMaintenance
         fields = [
-            'pm_id', 'scheduled_date', 'completed_date', 
-            'frequency', 'next_due_date', 'topics', 'is_overdue', 
-            'created_by', 'days_remaining'
+            'pm_id', 'job_id', 'job_description', 'scheduled_date', 
+            'completed_date', 'frequency', 'next_due_date', 'status'
         ]
     
-    def get_is_overdue(self, obj):
-        """Check if maintenance is overdue"""
-        from django.utils import timezone
-        if not obj.completed_date and obj.scheduled_date < timezone.now():
-            return True
-        return False
-    
-    def get_days_remaining(self, obj):
-        """Calculate days remaining until scheduled date or next due date"""
-        from django.utils import timezone
-        import math
-        
-        now = timezone.now()
-        
+    def get_status(self, obj):
         if obj.completed_date:
-            # If completed, show days until next due date
-            if obj.next_due_date:
-                delta = obj.next_due_date - now
-                return math.ceil(delta.total_seconds() / 86400)  # Convert to days and round up
-            return None
+            return "completed"
+        elif obj.scheduled_date < timezone.now():
+            return "overdue"
         else:
-            # If not completed, show days until scheduled date
-            delta = obj.scheduled_date - now
-            return math.ceil(delta.total_seconds() / 86400)  # Convert to days and round up
-
+            return "scheduled"
 
 class PreventiveMaintenanceDetailSerializer(serializers.ModelSerializer):
     """Detailed serializer for single item view, creation and updates"""
@@ -390,4 +367,45 @@ class UserSerializer(serializers.HyperlinkedModelSerializer):
         class Meta:
             model = User
             fields = ['url', 'username', 'email', 'is_staff']
-    
+
+
+class PreventiveMaintenanceCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PreventiveMaintenance
+        fields = [
+            'pmtitle', 'topics', 'scheduled_date', 'completed_date',
+            'frequency', 'custom_days', 'before_image', 'after_image', 'notes'
+        ]
+
+    def validate(self, data):
+        frequency = data.get('frequency')
+        custom_days = data.get('custom_days')
+
+        if frequency == 'custom' and not custom_days:
+            raise serializers.ValidationError({
+                'custom_days': 'Custom days value is required when frequency is set to Custom'
+            })
+
+        scheduled_date = data.get('scheduled_date')
+        completed_date = data.get('completed_date')
+
+        if scheduled_date and completed_date and completed_date < scheduled_date:
+            raise serializers.ValidationError({
+                'completed_date': 'Completion date cannot be earlier than scheduled date'
+            })
+
+        return data    
+class PreventiveMaintenanceCompleteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PreventiveMaintenance
+        fields = ['completed_date', 'after_image', 'notes']
+
+    def validate(self, data):
+        scheduled_date = self.instance.scheduled_date if self.instance else None
+        completed_date = data.get('completed_date')
+
+        if scheduled_date and completed_date and completed_date < scheduled_date:
+            raise serializers.ValidationError({
+                'completed_date': 'Completion date cannot be earlier than scheduled date'
+            })
+        return data
