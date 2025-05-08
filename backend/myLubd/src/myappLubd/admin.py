@@ -234,7 +234,7 @@ class UserProfileAdmin(admin.ModelAdmin):
 class PreventiveMaintenanceAdmin(admin.ModelAdmin):
     list_display = (
         'pm_id',
-        'get_job_id_link',
+        'pmtitle',
         'get_topics_for_job',
         'scheduled_date',
         'completed_date',
@@ -250,7 +250,7 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
         'next_due_date',
         'job__is_preventivemaintenance'
     )
-    search_fields = ('pm_id', 'job__job_id', 'notes', 'job__topics__title')
+    search_fields = ('pm_id', 'notes', 'job__topics__title')
     date_hierarchy = 'scheduled_date'
     raw_id_fields = ('job', 'before_image', 'after_image', 'created_by')
     readonly_fields = ('pm_id', 'next_due_date', 'before_image_preview', 'after_image_preview')
@@ -266,6 +266,14 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
         }),
     )
     actions = ['mark_completed']
+
+    def pmtitle(self, obj):
+        """Get the title of the PM job"""
+        if obj.job:
+            return obj.job.title
+        return f"PM #{obj.pm_id}"
+    pmtitle.short_description = 'PM Title'
+    pmtitle.admin_order_field = 'job__title'
 
     def get_job_id_link(self, obj):
         if obj.job:

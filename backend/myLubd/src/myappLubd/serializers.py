@@ -258,26 +258,7 @@ class SessionSerializer(serializers.ModelSerializer):
 
 # ----- Preventive Maintenance Serializers -----
 
-class PreventiveMaintenanceListSerializer(serializers.ModelSerializer):
-    """Lighter serializer for listing preventive maintenance records"""
-    job_id = serializers.CharField(source='job.job_id')
-    job_description = serializers.CharField(source='job.description', read_only=True)
-    status = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = PreventiveMaintenance
-        fields = [
-            'pm_id', 'job_id', 'job_description', 'scheduled_date', 
-            'completed_date', 'frequency', 'next_due_date', 'status'
-        ]
-    
-    def get_status(self, obj):
-        if obj.completed_date:
-            return "completed"
-        elif obj.scheduled_date < timezone.now():
-            return "overdue"
-        else:
-            return "scheduled"
+
 
 class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
     """Serializer for list view (with fewer fields)"""
