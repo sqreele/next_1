@@ -310,7 +310,7 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         # Optimize queries by prefetching related objects
-        return super().get_queryset(request).select_related('job', 'created_by', 'before_image', 'after_image').prefetch_related('job__topics')
+        return super().get_queryset(request).select_related('job', 'created_by').prefetch_related('job__topics')
 
     def save_model(self, request, obj, form, change):
         if not obj.pk and not obj.created_by_id:  # If new object and created_by not set
