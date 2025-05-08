@@ -25,7 +25,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('myappLubd.urls')),
     path('api-auth/', include('rest_framework.urls')),
-    path('api/', include('maintenance.api_urls')),  # DRF browsable API authentication
+    
 ]
 
 # Debug Toolbar

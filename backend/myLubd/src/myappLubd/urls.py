@@ -26,8 +26,7 @@ router.register(r'topics', TopicViewSet)
 router.register(r'jobs', JobViewSet)
 router.register(r'properties', PropertyViewSet)
 router.register(r'user-profiles', UserProfileViewSet)
-router.register(
-    r'preventive-maintenance', 
+router.register(r'preventive-maintenance', 
     views.PreventiveMaintenanceViewSet, 
     basename='preventive-maintenance'
 )
