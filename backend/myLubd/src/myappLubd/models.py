@@ -26,7 +26,7 @@ class PreventiveMaintenance(models.Model):
 
     # Maximum image dimensions
     MAX_SIZE = (800, 800)
-    pmtitle = models.TextField()
+    pmtitle = models.TextField(default='No title')
     pm_id = models.CharField(
         max_length=16,
         unique=True,
