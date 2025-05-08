@@ -409,3 +409,30 @@ class PreventiveMaintenanceCompleteSerializer(serializers.ModelSerializer):
                 'completed_date': 'Completion date cannot be earlier than scheduled date'
             })
         return data
+    
+    
+class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
+    job_id = serializers.CharField(source='job.job_id', read_only=True)
+    topics = TopicSerializer(many=True, read_only=True)
+    before_image_url = serializers.SerializerMethodField()
+    after_image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PreventiveMaintenance
+        fields = [
+            'pm_id', 'job_id', 'topics', 'scheduled_date', 'completed_date',
+            'frequency', 'custom_days', 'next_due_date',
+            'before_image', 'after_image', 'before_image_url', 'after_image_url', 'notes'
+        ]
+
+    def get_before_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.before_image and request:
+            return request.build_absolute_uri(obj.before_image.url)
+        return None
+
+    def get_after_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.after_image and request:
+            return request.build_absolute_uri(obj.after_image.url)
+        return None
