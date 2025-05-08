@@ -6,6 +6,10 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+class UserSerializer(serializers.HyperlinkedModelSerializer):
+    class Meta:
+        model = User
+        fields = ['url', 'username', 'email', 'is_staff']
 # Room serializer defined first to avoid circular import issues
 class RoomSerializer(serializers.ModelSerializer):
     class Meta:
@@ -276,298 +280,131 @@ class PreventiveMaintenanceListSerializer(serializers.ModelSerializer):
             return "scheduled"
 
 class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
-    """Full serializer for retrieving preventive maintenance details"""
-    job_details = serializers.SerializerMethodField()
-    creator_name = serializers.CharField(source='created_by.username', read_only=True)
-    before_image = JobImageSerializer(read_only=True)
-    after_image = JobImageSerializer(read_only=True)
-    before_image_url = serializers.SerializerMethodField()
-    after_image_url = serializers.SerializerMethodField()
+    """Serializer for list view (with fewer fields)"""
+    pmtitle =serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
+    topics = TopicSerializer(many=True, read_only=True)
+    created_by = UserSerializer(read_only=True)
+    days_remaining = serializers.SerializerMethodField()
     
     class Meta:
         model = PreventiveMaintenance
         fields = [
-            'pm_id', 'job', 'scheduled_date', 'completed_date', 
-            'frequency', 'custom_days', 'next_due_date', 
-            'before_image', 'after_image', 'notes', 
-            'created_by', 'creator_name', 'updated_at',
-            'job_details', 'before_image_url', 'after_image_url'
+            'pm_id', 'scheduled_date', 'completed_date', 
+            'frequency', 'next_due_date', 'topics', 'is_overdue', 
+            'created_by', 'days_remaining'
         ]
-        read_only_fields = ['pm_id', 'created_by', 'next_due_date', 'updated_at']
     
-    def get_job_details(self, obj):
-        """Return simplified job details"""
-        return {
-            'job_id': obj.job.job_id,
-            'description': obj.job.description,
-            'status': obj.job.status,
-            'priority': obj.job.priority
-        }
+    def get_is_overdue(self, obj):
+        """Check if maintenance is overdue"""
+        from django.utils import timezone
+        if not obj.completed_date and obj.scheduled_date < timezone.now():
+            return True
+        return False
+    
+    def get_days_remaining(self, obj):
+        """Calculate days remaining until scheduled date or next due date"""
+        from django.utils import timezone
+        import math
+        
+        now = timezone.now()
+        
+        if obj.completed_date:
+            # If completed, show days until next due date
+            if obj.next_due_date:
+                delta = obj.next_due_date - now
+                return math.ceil(delta.total_seconds() / 86400)  # Convert to days and round up
+            return None
+        else:
+            # If not completed, show days until scheduled date
+            delta = obj.scheduled_date - now
+            return math.ceil(delta.total_seconds() / 86400)  # Convert to days and round up
+
+
+class PreventiveMaintenanceDetailSerializer(serializers.ModelSerializer):
+    """Detailed serializer for single item view, creation and updates"""
+    pmtitle =serializers.SerializerMethodField()
+    before_image_url = serializers.SerializerMethodField()
+    after_image_url = serializers.SerializerMethodField()
+    is_overdue = serializers.SerializerMethodField()
+    created_by = UserSerializer(read_only=True)
+    days_remaining = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = PreventiveMaintenance
+        fields = [
+            'pm_id', 'job', 'topics', 'scheduled_date', 'completed_date',
+            'frequency', 'custom_days', 'next_due_date',
+            'before_image', 'after_image', 'before_image_url', 'after_image_url',
+            'notes', 'created_by', 'updated_at', 'is_overdue', 'days_remaining'
+        ]
+        read_only_fields = ['pm_id', 'created_by', 'updated_at', 'next_due_date']
     
     def get_before_image_url(self, obj):
-        """Return the URL for the before image if it exists"""
-        if obj.before_image and obj.before_image.image:
+        """Get the full URL for the before image"""
+        if obj.before_image:
             request = self.context.get('request')
             if request:
-                return request.build_absolute_uri(obj.before_image.image.url)
+                return request.build_absolute_uri(obj.before_image.url)
+            return obj.before_image.url
         return None
     
     def get_after_image_url(self, obj):
-        """Return the URL for the after image if it exists"""
-        if obj.after_image and obj.after_image.image:
+        """Get the full URL for the after image"""
+        if obj.after_image:
             request = self.context.get('request')
             if request:
-                return request.build_absolute_uri(obj.after_image.image.url)
+                return request.build_absolute_uri(obj.after_image.url)
+            return obj.after_image.url
         return None
-
-class PreventiveMaintenanceCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for creating and updating preventive maintenance records"""
-    job_id = serializers.CharField(write_only=True, required=False)
-    before_image_file = serializers.ImageField(required=False, write_only=True)
-    after_image_file = serializers.ImageField(required=False, write_only=True)
-    before_image_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
-    after_image_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
-    topics = serializers.PrimaryKeyRelatedField(
-        queryset=Topic.objects.all(), 
-        many=True, 
-        required=False
-    )
     
-    class Meta:
-        model = PreventiveMaintenance
-        fields = [
-            'job', 'job_id', 'scheduled_date', 'frequency', 
-            'custom_days', 'notes', 'before_image_id', 'after_image_id',
-            'before_image_file', 'after_image_file', 'topics'
-        ]
+    def get_is_overdue(self, obj):
+        """Check if maintenance is overdue"""
+        from django.utils import timezone
+        if not obj.completed_date and obj.scheduled_date < timezone.now():
+            return True
+        return False
+    
+    def get_days_remaining(self, obj):
+        """Calculate days remaining until scheduled date or next due date"""
+        from django.utils import timezone
+        import math
+        
+        now = timezone.now()
+        
+        if obj.completed_date:
+            # If completed, show days until next due date
+            if obj.next_due_date:
+                delta = obj.next_due_date - now
+                return math.ceil(delta.total_seconds() / 86400)  # Convert to days and round up
+            return None
+        else:
+            # If not completed, show days until scheduled date
+            delta = obj.scheduled_date - now
+            return math.ceil(delta.total_seconds() / 86400)  # Convert to days and round up
     
     def validate(self, data):
-        # Validate frequency and custom_days
-        if data.get('frequency') == 'custom' and not data.get('custom_days'):
-            raise serializers.ValidationError(
-                "Custom days are required when frequency is set to 'custom'"
-            )
+        """Custom validation for form data"""
+        frequency = data.get('frequency')
+        custom_days = data.get('custom_days')
         
-        # Check that either job or job_id is provided
-        if not data.get('job') and not data.get('job_id'):
-            raise serializers.ValidationError("Either job or job_id must be provided")
-            
+        # Validate custom frequency
+        if frequency == 'custom' and not custom_days:
+            raise serializers.ValidationError({
+                'custom_days': 'Custom days value is required when frequency is set to Custom'
+            })
+        
+        # Validate completed date in relation to scheduled date
+        scheduled_date = data.get('scheduled_date')
+        completed_date = data.get('completed_date')
+        
+        if scheduled_date and completed_date and completed_date < scheduled_date:
+            raise serializers.ValidationError({
+                'completed_date': 'Completion date cannot be earlier than scheduled date'
+            })
+        
         return data
     
-    def validate_job_id(self, value):
-        if value:
-            try:
-                Job.objects.get(job_id=value)
-                return value
-            except Job.DoesNotExist:
-                raise serializers.ValidationError("Job with this ID does not exist")
-        return value
-    
-    def validate_before_image_id(self, value):
-        if value:
-            try:
-                JobImage.objects.get(id=value)
-                return value
-            except JobImage.DoesNotExist:
-                raise serializers.ValidationError("Image with this ID does not exist")
-        return value
-    
-    def validate_after_image_id(self, value):
-        if value:
-            try:
-                JobImage.objects.get(id=value)
-                return value
-            except JobImage.DoesNotExist:
-                raise serializers.ValidationError("Image with this ID does not exist")
-        return value
-    
-    def create(self, validated_data):
-        # Handle job_id
-        job_id = validated_data.pop('job_id', None)
-        job = validated_data.get('job')
-        
-        if job_id and not job:
-            job = Job.objects.get(job_id=job_id)
-            validated_data['job'] = job
-        
-        # Remove file fields as they're handled separately
-        before_image_file = validated_data.pop('before_image_file', None)
-        after_image_file = validated_data.pop('after_image_file', None)
-        before_image_id = validated_data.pop('before_image_id', None)
-        after_image_id = validated_data.pop('after_image_id', None)
-        topics = validated_data.pop('topics', [])
-        
-        # Mark job as preventive maintenance
-        if job and not job.is_preventivemaintenance:
-            job.is_preventivemaintenance = True
-            job.save()
-        
-        # Get current user from context
-        request = self.context.get('request')
-        user = request.user if request and hasattr(request, 'user') else None
-        
-        # Get images if IDs provided
-        before_image = JobImage.objects.get(id=before_image_id) if before_image_id else None
-        after_image = JobImage.objects.get(id=after_image_id) if after_image_id else None
-        
-        # Create PM record
-        pm = PreventiveMaintenance.objects.create(
-            created_by=user,
-            before_image=before_image,
-            after_image=after_image,
-            **validated_data
-        )
-        
-        # Add topics
-        if topics:
-            pm.topics.set(topics)
-        
-        # Process image files if provided
-        if request:
-            if before_image_file:
-                job_image = JobImage.objects.create(
-                    job=pm.job,
-                    image=before_image_file,
-                    uploaded_by=user
-                )
-                pm.before_image = job_image
-                pm.save(update_fields=['before_image'])
-                
-            if after_image_file:
-                job_image = JobImage.objects.create(
-                    job=pm.job,
-                    image=after_image_file,
-                    uploaded_by=user
-                )
-                pm.after_image = job_image
-                pm.save(update_fields=['after_image'])
-        
-        return pm
-    
-    def update(self, instance, validated_data):
-        # Handle job_id if present
-        if 'job_id' in validated_data:
-            job_id = validated_data.pop('job_id')
-            job = Job.objects.get(job_id=job_id)
-            instance.job = job
-            
-            # Mark job as preventive maintenance
-            if not job.is_preventivemaintenance:
-                job.is_preventivemaintenance = True
-                job.save()
-        
-        # Remove file fields as they're handled separately
-        before_image_file = validated_data.pop('before_image_file', None)
-        after_image_file = validated_data.pop('after_image_file', None)
-        topics = validated_data.pop('topics', None)
-        
-        # Handle image IDs
-        if 'before_image_id' in validated_data:
-            before_image_id = validated_data.pop('before_image_id')
-            if before_image_id:
-                instance.before_image = JobImage.objects.get(id=before_image_id)
-            else:
-                instance.before_image = None
-                
-        if 'after_image_id' in validated_data:
-            after_image_id = validated_data.pop('after_image_id')
-            if after_image_id:
-                instance.after_image = JobImage.objects.get(id=after_image_id)
-            else:
-                instance.after_image = None
-        
-        # Handle topics if provided
-        if topics is not None:
-            instance.topics.set(topics)
-        
-        # Update other fields
-        for key, value in validated_data.items():
-            setattr(instance, key, value)
-        
-        # Process image files if provided
-        request = self.context.get('request')
-        if request:
-            user = request.user if hasattr(request, 'user') else None
-            
-            if before_image_file:
-                job_image = JobImage.objects.create(
-                    job=instance.job,
-                    image=before_image_file,
-                    uploaded_by=user
-                )
-                instance.before_image = job_image
-                
-            if after_image_file:
-                job_image = JobImage.objects.create(
-                    job=instance.job,
-                    image=after_image_file,
-                    uploaded_by=user
-                )
-                instance.after_image = job_image
-        
-        # Recalculate next_due_date if completed_date changed
-        if 'completed_date' in validated_data and instance.completed_date and not instance.next_due_date:
-            instance.calculate_next_due_date()
-        
-        instance.save()
-        return instance
-
-class PreventiveMaintenanceCompleteSerializer(serializers.ModelSerializer):
-    """Serializer for marking a preventive maintenance task as completed"""
-    completed_date = serializers.DateTimeField(required=False)
-    notes = serializers.CharField(required=False, allow_blank=True)
-    after_image_id = serializers.IntegerField(required=False, allow_null=True, write_only=True)
-    after_image_file = serializers.ImageField(required=False, write_only=True)
-    
-    class Meta:
-        model = PreventiveMaintenance
-        fields = ['completed_date', 'notes', 'after_image_id', 'after_image_file']
-    
-    def validate_after_image_id(self, value):
-        if value:
-            try:
-                JobImage.objects.get(id=value)
-                return value
-            except JobImage.DoesNotExist:
-                raise serializers.ValidationError("Image with this ID does not exist")
-        return value
-    
-    def update(self, instance, validated_data):
-        # Set completed date if not provided
-        if 'completed_date' not in validated_data or not validated_data['completed_date']:
-            validated_data['completed_date'] = timezone.now()
-        
-        # Remove file fields as they're handled separately
-        after_image_file = validated_data.pop('after_image_file', None)
-        
-        # Update notes if provided
-        if 'notes' in validated_data:
-            instance.notes = validated_data['notes']
-        
-        # Update completed date
-        instance.completed_date = validated_data['completed_date']
-        
-        # Update after image if ID provided
-        if 'after_image_id' in validated_data and validated_data['after_image_id']:
-            after_image = JobImage.objects.get(id=validated_data['after_image_id'])
-            instance.after_image = after_image
-        
-        # Process image file if provided
-        request = self.context.get('request')
-        if request and after_image_file:
-            user = request.user if hasattr(request, 'user') else None
-            job_image = JobImage.objects.create(
-                job=instance.job,
-                image=after_image_file,
-                uploaded_by=user
-            )
-            instance.after_image = job_image
-        
-        # Calculate next due date
-        instance.calculate_next_due_date()
-        instance.save()
-        
-        return instance
 class UserSerializer(serializers.HyperlinkedModelSerializer): 
         class Meta:
             model = User

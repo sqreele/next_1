@@ -11,9 +11,8 @@ from django.core.files.base import ContentFile
 from pathlib import Path
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-
-
-
+from django.contrib.auth import get_user_model
+User = get_user_model()
 class PreventiveMaintenance(models.Model):
     FREQUENCY_CHOICES = [
         ('daily', 'Daily'),
@@ -25,13 +24,23 @@ class PreventiveMaintenance(models.Model):
         ('custom', 'Custom'),
     ]
 
+    # Maximum image dimensions
+    MAX_SIZE = (800, 800)
+    pmtitle = models.TextField()
     pm_id = models.CharField(
         max_length=16,
         unique=True,
         blank=True,
         editable=False
     )
-
+    
+    job = models.ForeignKey(
+        'Job',  # Use string reference to avoid circular import
+        on_delete=models.CASCADE,
+        related_name='preventive_maintenances',
+        help_text="The related maintenance job"
+    )
+    
     # Add many-to-many relationship with Topic
     topics = models.ManyToManyField(
         'Topic',
@@ -39,6 +48,7 @@ class PreventiveMaintenance(models.Model):
         blank=True,
         help_text="Topics associated with this preventive maintenance"
     )
+    
     scheduled_date = models.DateTimeField()
     completed_date = models.DateTimeField(null=True, blank=True)
     frequency = models.CharField(
@@ -53,7 +63,7 @@ class PreventiveMaintenance(models.Model):
     )
     next_due_date = models.DateTimeField(null=True, blank=True)
     
-    # ImageField instead of ForeignKey
+    # Direct ImageFields instead of ForeignKey to JobImage
     before_image = models.ImageField(
         upload_to='maintenance_pm_images/%Y/%m/',
         validators=[FileExtensionValidator(['png', 'jpg', 'jpeg', 'gif', 'webp'])],
@@ -89,18 +99,17 @@ class PreventiveMaintenance(models.Model):
     def __str__(self):
         return f"PM {self.pm_id} - {self.job.job_id}"
 
-    def process_image(self, image_field):
+    def process_image(self, image_file):
         """Process and resize the image, converting it to WebP format."""
-        if not image_field:
-            return
+        if not image_file:
+            return None, None
             
         try:
-            img = Image.open(image_field)
-            max_size = (800, 800)  # Maximum image dimensions
-
+            img = Image.open(image_file)
+            
             # Resize if image is larger than MAX_SIZE
-            if img.width > max_size[0] or img.height > max_size[1]:
-                img.thumbnail(max_size, Image.Resampling.LANCZOS)
+            if img.width > self.MAX_SIZE[0] or img.height > self.MAX_SIZE[1]:
+                img.thumbnail(self.MAX_SIZE, Image.Resampling.LANCZOS)
 
             # Convert RGBA to RGB if necessary
             if img.mode in ('RGBA', 'LA'):
@@ -166,6 +175,7 @@ class PreventiveMaintenance(models.Model):
         self._after_image_changed = False
     
     def clean(self):
+        super().clean()
         # Mark images as changed if they differ from the original
         if self.before_image != self._original_before_image:
             self._before_image_changed = True
@@ -220,136 +230,22 @@ class PreventiveMaintenance(models.Model):
         elif self.frequency == 'custom' and self.custom_days:
             # Add custom number of days
             self.next_due_date = base_date + timezone.timedelta(days=self.custom_days)
-    FREQUENCY_CHOICES = [
-        ('daily', 'Daily'),
-        ('weekly', 'Weekly'),
-        ('monthly', 'Monthly'),
-        ('quarterly', 'Quarterly'),
-        ('semi_annual', 'Semi-Annual'),
-        ('annual', 'Annual'),
-        ('custom', 'Custom'),
-    ]
-
-    pm_id = models.CharField(
-        max_length=16,
-        unique=True,
-        blank=True,
-        editable=False
-    )
-    job = models.ForeignKey(
-        'Job',  # Use string reference to avoid circular import
-        on_delete=models.CASCADE,
-        related_name='preventive_maintenances',
-        help_text="The related maintenance job"
-    )
-    scheduled_date = models.DateTimeField()
-    completed_date = models.DateTimeField(null=True, blank=True)
-    frequency = models.CharField(
-        max_length=20,
-        choices=FREQUENCY_CHOICES,
-        default='monthly'
-    )
-    custom_days = models.PositiveIntegerField(
-        null=True, 
-        blank=True, 
-        help_text="Custom frequency in days, if frequency is set to 'custom'"
-    )
-    next_due_date = models.DateTimeField(null=True, blank=True)
-    before_image = models.ForeignKey(
-        'JobImage',  # Use string reference
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='pm_before_images'
-    )
-    after_image = models.ForeignKey(
-        'JobImage',  # Use string reference
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='pm_after_images'
-    )
-    notes = models.TextField(blank=True, null=True)
-    created_by = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='created_preventive_maintenances'
-    )
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ['-scheduled_date']
-        verbose_name = 'Preventive Maintenance'
-        verbose_name_plural = 'Preventive Maintenances'
-        indexes = [
-            models.Index(fields=['scheduled_date', 'next_due_date']),
-            models.Index(fields=['frequency']),
-        ]
-
-    def __str__(self):
-        return f"PM {self.pm_id} - {self.job.job_id}"
-
-    def save(self, *args, **kwargs):
-        # Generate PM ID if not set
-        if not self.pm_id:
-            timestamp = timezone.now().strftime('%y')
-            unique_id = get_random_string(length=6, allowed_chars='0123456789ABCDEF')
-            self.pm_id = f"pm{timestamp}{unique_id}"
             
-        # Calculate next due date based on frequency
-        if self.completed_date and not self.next_due_date:
-            self.calculate_next_due_date()
-            
-        super().save(*args, **kwargs)
-
-    def calculate_next_due_date(self):
-        """Calculate the next due date based on frequency"""
-        if not self.completed_date:
-            return
-            
-        base_date = self.completed_date
+    def delete(self, *args, **kwargs):
+        """Remove image files when model instance is deleted"""
+        # Store image paths before deletion
+        before_image_path = self.before_image.path if self.before_image and hasattr(self.before_image, 'path') else None
+        after_image_path = self.after_image.path if self.after_image and hasattr(self.after_image, 'path') else None
         
-        if self.frequency == 'daily':
-            self.next_due_date = base_date + timezone.timedelta(days=1)
-        elif self.frequency == 'weekly':
-            self.next_due_date = base_date + timezone.timedelta(weeks=1)
-        elif self.frequency == 'monthly':
-            # Add one month (approximately)
-            month = base_date.month + 1
-            year = base_date.year
-            if month > 12:
-                month = 1
-                year += 1
-            # Handle different month lengths
-            day = min(base_date.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 
-                                     31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month-1])
-            self.next_due_date = base_date.replace(year=year, month=month, day=day)
-        elif self.frequency == 'quarterly':
-            # Add three months
-            month = base_date.month + 3
-            year = base_date.year
-            if month > 12:
-                month -= 12
-                year += 1
-            day = min(base_date.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 
-                                     31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month-1])
-            self.next_due_date = base_date.replace(year=year, month=month, day=day)
-        elif self.frequency == 'semi_annual':
-            # Add six months
-            month = base_date.month + 6
-            year = base_date.year
-            if month > 12:
-                month -= 12
-                year += 1
-            day = min(base_date.day, [31, 29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28, 
-                                     31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month-1])
-            self.next_due_date = base_date.replace(year=year, month=month, day=day)
-        elif self.frequency == 'annual':
-            # Add one year
-            self.next_due_date = base_date.replace(year=base_date.year + 1)
-        elif self.frequency == 'custom' and self.custom_days:
-            # Add custom number of days
-            self.next_due_date = base_date + timezone.timedelta(days=self.custom_days)
+        # Call the parent delete method
+        super().delete(*args, **kwargs)
+        
+        # Delete image files after model is deleted
+        if before_image_path and os.path.isfile(before_image_path):
+            os.remove(before_image_path)
+            
+        if after_image_path and os.path.isfile(after_image_path):
+            os.remove(after_image_path)   
 def get_upload_path(instance, filename):
     """Generate a unique path for uploaded files"""
     ext = Path(filename).suffix
