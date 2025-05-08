@@ -252,7 +252,7 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
     )
     search_fields = ('pm_id', 'notes', 'job__topics__title')
     date_hierarchy = 'scheduled_date'
-    raw_id_fields = ('job', 'before_image', 'after_image', 'created_by')
+   
     readonly_fields = ('pm_id', 'next_due_date', 'before_image_preview', 'after_image_preview')
     fieldsets = (
         ('Identification', {
