@@ -16,7 +16,7 @@ from .serializers import (
     UserProfileSerializer, PropertySerializer, RoomSerializer, TopicSerializer, JobSerializer,
     UserSerializer, PreventiveMaintenanceSerializer, PreventiveMaintenanceCreateUpdateSerializer,
     PreventiveMaintenanceCompleteSerializer, PreventiveMaintenanceListSerializer,
-    PropertyPMStatusSerializer,UserSerialize
+    PropertyPMStatusSerializer
 )
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import viewsets, status, permissions
@@ -1073,9 +1073,7 @@ def get_preventive_maintenance_data(request):
             {"detail": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-class UserViewSet(viewsets.ModelViewSet):
-    queryset = User.objects.all()
-    serializer_class = UserSerialize
+
     
     
     
