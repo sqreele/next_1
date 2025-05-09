@@ -62,6 +62,6 @@ urlpatterns = [
     path('api/jobs/preventive-maintenance/', 
          views.PreventiveMaintenanceViewSet.as_view({'get': 'list', 'post': 'create'}), 
          name='job-preventive-maintenance'),
-    path('api-auth/', include('rest_framework.urls', namespace='rest_framework'))
+
 
 ]

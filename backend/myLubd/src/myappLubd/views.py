@@ -9,6 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from google.oauth2 import id_token
 from google.auth.transport import requests
 from django.utils import timezone
+from django.db.models import Count, Q, F, ExpressionWrapper, fields, Case, When, Value
 from .models import UserProfile, Property, Room, Topic, Job, Session, PreventiveMaintenance, JobImage
 from django.urls import reverse
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -18,6 +19,7 @@ from .serializers import (
     PreventiveMaintenanceCompleteSerializer, PreventiveMaintenanceListSerializer,
     PropertyPMStatusSerializer
 )
+import math
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import viewsets, status, permissions
 from django.shortcuts import get_object_or_404
@@ -45,364 +47,568 @@ from .models import PreventiveMaintenance, JobImage
 
 
 
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.utils import timezone
+from django.db.models import Count, Q, F, ExpressionWrapper, fields
+from datetime import timedelta
+import math
+
+from .models import PreventiveMaintenance, Topic
+from .serializers import (
+    PreventiveMaintenanceSerializer, 
+    PreventiveMaintenanceDetailSerializer,
+    PreventiveMaintenanceListSerializer,
+    PreventiveMaintenanceCompleteSerializer,
+    TopicSerializer
+)
+
 class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
-    """Viewset for Preventive Maintenance records"""
-    permission_classes = [IsAuthenticated]
+    """
+    ViewSet for PreventiveMaintenance model.
+    Provides standard CRUD operations plus custom endpoints:
+    - stats: Get statistics about preventive maintenance
+    - upcoming: Get list of upcoming maintenance tasks
+    - overdue: Get list of overdue maintenance tasks
+    - complete: Mark a maintenance task as completed
+    - upload_images: Upload before/after images for maintenance tasks
+    - reschedule: Reschedule a maintenance task
+    - by_priority: Get tasks sorted by priority
+    """
+    serializer_class = PreventiveMaintenanceSerializer
     lookup_field = 'pm_id'
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
-
-    def get_queryset(self):
-        queryset = PreventiveMaintenance.objects.all()
-
-        # Filter by frequency if provided
-        frequency = self.request.query_params.get('frequency')
-        if frequency:
-            queryset = queryset.filter(frequency=frequency)
-
-        # Filter by status (completed/pending/overdue)
-        status_param = self.request.query_params.get('status')
-        if status_param == 'completed':
-            queryset = queryset.filter(completed_date__isnull=False)
-        elif status_param == 'pending':
-            queryset = queryset.filter(completed_date__isnull=True)
-        elif status_param == 'overdue':
-            queryset = queryset.filter(
-                scheduled_date__lt=timezone.now(),
-                completed_date__isnull=True
-            )
-
-        # Filter by date range
-        start_date = self.request.query_params.get('start_date')
-        end_date = self.request.query_params.get('end_date')
-        if start_date:
-            queryset = queryset.filter(scheduled_date__gte=start_date)
-        if end_date:
-            queryset = queryset.filter(scheduled_date__lte=end_date)
-
-        return queryset.select_related('created_by', 'before_image', 'after_image')
-
-    def get_serializer_class(self):
-        if self.action == 'list':
-            return PreventiveMaintenanceListSerializer
-        elif self.action in ['create', 'update', 'partial_update']:
-            return PreventiveMaintenanceCreateUpdateSerializer
-        elif self.action == 'complete':
-            return PreventiveMaintenanceCompleteSerializer
-        return PreventiveMaintenanceSerializer
-
-    def perform_create(self, serializer):
-        pm = serializer.save(created_by=self.request.user)
-        self._process_image_upload(pm, 'before_image')
-        self._process_image_upload(pm, 'after_image')
-
-    def perform_update(self, serializer):
-        pm = serializer.save()
-        self._process_image_upload(pm, 'before_image')
-        self._process_image_upload(pm, 'after_image')
-
-    def _process_image_upload(self, pm, image_type):
-        """Helper method to process image uploads"""
-        image_key = f'{image_type}_file'
-        if image_key in self.request.data and self.request.data[image_key]:
-            image_file = self.request.data[image_key]
-            job_image = JobImage.objects.create(
-                image=image_file,
-                uploaded_by=self.request.user
-            )
-            setattr(pm, image_type, job_image)
-            pm.save(update_fields=[image_type])
-
-    @action(detail=True, methods=['post'])
-    def complete(self, request, pm_id=None):
-        """Mark a preventive maintenance task as completed"""
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data)
-        serializer.is_valid(raise_exception=True)
-        pm = serializer.save()
-
-        self._process_image_upload(pm, 'before_image')
-        self._process_image_upload(pm, 'after_image')
-
-        return Response(
-            PreventiveMaintenanceSerializer(
-                instance,
-                context={'request': request}
-            ).data
-        )
-
-    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
-    def upload_before_image(self, request, pm_id=None):
-        """Upload before image for a PM task"""
-        return self._upload_image(request, pm_id, 'before_image')
-
-    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
-    def upload_after_image(self, request, pm_id=None):
-        """Upload after image for a PM task"""
-        return self._upload_image(request, pm_id, 'after_image')
-
-    def _upload_image(self, request, pm_id, image_type):
-        pm = self.get_object()
-
-        if 'image' not in request.data:
-            return Response({'error': 'No image provided'}, status=status.HTTP_400_BAD_REQUEST)
-
-        job_image = JobImage.objects.create(
-            image=request.data['image'],
-            uploaded_by=request.user
-        )
-
-        previous_image = getattr(pm, image_type)
-        if previous_image:
-            # Optionally delete previous image
-            # previous_image.delete()
-            pass
-
-        setattr(pm, image_type, job_image)
-        pm.save(update_fields=[image_type])
-
-        serializer = PreventiveMaintenanceSerializer(pm, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @action(detail=False)
-    def upcoming(self, request):
-        """List upcoming maintenance tasks"""
-        days = request.query_params.get('days', 30)
-        try:
-            days = int(days)
-        except ValueError:
-            days = 30
-
-        end_date = timezone.now() + timezone.timedelta(days=days)
-
-        queryset = PreventiveMaintenance.objects.filter(
-            scheduled_date__lte=end_date,
-            completed_date__isnull=True
-        ).select_related('created_by', 'before_image', 'after_image')
-
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = PreventiveMaintenanceSerializer(page, many=True, context={'request': request})
-            return self.get_paginated_response(serializer.data)
-
-        serializer = PreventiveMaintenanceSerializer(queryset, many=True, context={'request': request})
-        return Response(serializer.data)
-
-    @action(detail=False)
-    def overdue(self, request):
-        """List overdue maintenance tasks"""
-        queryset = PreventiveMaintenance.objects.filter(
-            scheduled_date__lt=timezone.now(),
-            completed_date__isnull=True
-        ).select_related('created_by', 'before_image', 'after_image')
-
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = PreventiveMaintenanceSerializer(page, many=True, context={'request': request})
-            return self.get_paginated_response(serializer.data)
-
-        serializer = PreventiveMaintenanceSerializer(queryset, many=True, context={'request': request})
-        return Response(serializer.data)
-
-    """Viewset for Preventive Maintenance records"""
-    permission_classes = [IsAuthenticated]
-    lookup_field = 'pm_id'
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    filterset_fields = ['topics__id', 'frequency', 'status']
+    search_fields = ['pm_id', 'title', 'description']
+    ordering_fields = ['scheduled_date', 'created_date', 'frequency']
+    ordering = ['-scheduled_date']
     
     def get_queryset(self):
+        """
+        Return a queryset filtered by request parameters.
+        Supports filtering by:
+        - status (completed, pending, overdue)
+        - topic_id
+        - date_from & date_to
+        - pm_id (exact match)
+        - priority
+        """
         queryset = PreventiveMaintenance.objects.all()
         
-        # Filter by pm_id if provided
-        pm_id= self.request.query_params.get('pm_id')
+        # Get filter parameters
+        pm_id = self.request.query_params.get('pm_id', None)
+        status_param = self.request.query_params.get('status', None)
+        topic_id = self.request.query_params.get('topic_id', None)
+        date_from = self.request.query_params.get('date_from', None)
+        date_to = self.request.query_params.get('date_to', None)
+        priority = self.request.query_params.get('priority', None)
+        
+        # Apply filters if provided
         if pm_id:
-            queryset = queryset.filter(pm_id=pm_id)
+            queryset = queryset.filter(pm_id__icontains=pm_id)
         
-        # Filter by frequency if provided
-        frequency = self.request.query_params.get('frequency')
-        if frequency:
-            queryset = queryset.filter(frequency=frequency)
+        if status_param:
+            now = timezone.now()
+            if status_param == 'completed':
+                queryset = queryset.filter(completed_date__isnull=False)
+            elif status_param == 'pending':
+                queryset = queryset.filter(
+                    completed_date__isnull=True,
+                    scheduled_date__gte=now
+                )
+            elif status_param == 'overdue':
+                queryset = queryset.filter(
+                    completed_date__isnull=True,
+                    scheduled_date__lt=now
+                )
         
-        # Filter by status (completed/pending)
-        status = self.request.query_params.get('status')
-        if status == 'completed':
-            queryset = queryset.filter(completed_date__isnull=False)
-        elif status == 'pending':
-            queryset = queryset.filter(completed_date__isnull=True)
-        elif status == 'overdue':
-            queryset = queryset.filter(
-                scheduled_date__lt=timezone.now(),
-                completed_date__isnull=True
-            )
+        if topic_id:
+            queryset = queryset.filter(topics__id=topic_id)
         
-        # Filter by date range
-        start_date = self.request.query_params.get('start_date')
-        end_date = self.request.query_params.get('end_date')
-        if start_date:
-            queryset = queryset.filter(scheduled_date__gte=start_date)
-        if end_date:
-            queryset = queryset.filter(scheduled_date__lte=end_date)
+        if date_from:
+            queryset = queryset.filter(scheduled_date__gte=date_from)
         
-        return queryset.select_related(
-            'job', 'created_by', 'before_image', 'after_image'
-        )
+        if date_to:
+            queryset = queryset.filter(scheduled_date__lte=date_to)
+            
+        if priority:
+            queryset = queryset.filter(priority=priority)
+        
+        return queryset.distinct()
     
     def get_serializer_class(self):
+        """Return appropriate serializer based on action"""
         if self.action == 'list':
             return PreventiveMaintenanceListSerializer
-        elif self.action in ['create', 'update', 'partial_update']:
-            return PreventiveMaintenanceCreateUpdateSerializer
+        elif self.action in ['retrieve', 'create', 'update', 'partial_update']:
+            return PreventiveMaintenanceDetailSerializer
         elif self.action == 'complete':
             return PreventiveMaintenanceCompleteSerializer
-        return PreventiveMaintenanceSerializer
+        
+        return self.serializer_class
     
     def perform_create(self, serializer):
-        pm = serializer.save(created_by=self.request.user)
+        """Add the current user as the creator when creating a record"""
+        serializer.save(created_by=self.request.user)
         
-        # Handle image uploads
-        self._process_image_upload(pm, 'before_image')
-        self._process_image_upload(pm, 'after_image')
-    
     def perform_update(self, serializer):
-        pm = serializer.save()
-        
-        # Handle image uploads
-        self._process_image_upload(pm, 'before_image')
-        self._process_image_upload(pm, 'after_image')
+        """Add the current user as the updater when updating a record"""
+        serializer.save(updated_by=self.request.user)
     
-    def _process_image_upload(self, pm, image_type):
-        """Helper method to process image uploads"""
-        # Check if image is in request data
-        image_key = f'{image_type}_file'
-        if image_key in self.request.data and self.request.data[image_key]:
-            # Get the image file from request
-            image_file = self.request.data[image_key]
-            
-            # Create a new JobImage
-            job_image = JobImage(
-                job=pm.job,
-                image=image_file,
-                uploaded_by=self.request.user
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """
+        Get statistics about preventive maintenance tasks
+        Returns:
+        - counts: Counts of total, completed, pending, and overdue tasks
+        - frequency_distribution: Distribution of tasks by frequency
+        - priority_distribution: Distribution of tasks by priority
+        - completion_rate: Rate of completion for scheduled tasks
+        - upcoming: List of upcoming maintenance tasks (next 7 days)
+        """
+        # Get current date for status calculations
+        now = timezone.now()
+        
+        # Get all maintenance records
+        queryset = self.get_queryset()
+        
+        # Calculate counts
+        total = queryset.count()
+        completed = queryset.filter(completed_date__isnull=False).count()
+        overdue = queryset.filter(
+            completed_date__isnull=True,
+            scheduled_date__lt=now
+        ).count()
+        pending = total - completed - overdue
+        
+        # Calculate frequency distribution
+        frequency_queryset = queryset.values('frequency').annotate(count=Count('frequency'))
+        frequency_distribution = [
+            {'frequency': item['frequency'], 'count': item['count']}
+            for item in frequency_queryset
+        ]
+        
+        # Calculate priority distribution
+        priority_queryset = queryset.values('priority').annotate(count=Count('priority'))
+        priority_distribution = [
+            {'priority': item['priority'], 'count': item['count']}
+            for item in priority_queryset
+        ]
+        
+        # Calculate completion rate (tasks completed on time vs total completed)
+        completed_tasks = queryset.filter(completed_date__isnull=False)
+        completed_count = completed_tasks.count()
+        on_time_count = completed_tasks.filter(
+            completed_date__lte=F('scheduled_date')
+        ).count()
+        
+        completion_rate = (on_time_count / completed_count * 100) if completed_count > 0 else 0
+        
+        # Get upcoming maintenance (next 7 days)
+        seven_days_later = now + timedelta(days=7)
+        upcoming_queryset = queryset.filter(
+            completed_date__isnull=True,
+            scheduled_date__gte=now,
+            scheduled_date__lte=seven_days_later
+        ).order_by('scheduled_date')[:5]  # Limit to 5 items
+        
+        upcoming_serializer = PreventiveMaintenanceListSerializer(
+            upcoming_queryset, 
+            many=True,
+            context={'request': request}
+        )
+        
+        # Calculate avg completion time by frequency
+        avg_completion_times = {}
+        for freq in ['daily', 'weekly', 'biweekly', 'monthly', 'quarterly', 'biannually', 'annually']:
+            tasks = completed_tasks.filter(frequency=freq)
+            if tasks.count() > 0:
+                # Calculate average days between scheduled and completed dates
+                sum_days = 0
+                count = 0
+                for task in tasks:
+                    if task.scheduled_date and task.completed_date:
+                        diff = task.completed_date - task.scheduled_date
+                        sum_days += diff.days
+                        count += 1
+                avg_completion_times[freq] = round(sum_days / count, 1) if count > 0 else 0
+        
+        # Prepare response data
+        response_data = {
+            'counts': {
+                'total': total,
+                'completed': completed,
+                'pending': pending,
+                'overdue': overdue
+            },
+            'frequency_distribution': frequency_distribution,
+            'priority_distribution': priority_distribution,
+            'completion_rate': round(completion_rate, 1),
+            'avg_completion_times': avg_completion_times,
+            'upcoming': upcoming_serializer.data
+        }
+        
+        return Response(response_data)
+    
+    @action(detail=False, methods=['get'])
+    def upcoming(self, request):
+        """
+        Get upcoming preventive maintenance tasks
+        Query params:
+        - days: Number of days to look ahead (default: 30)
+        - priority: Filter by priority (optional)
+        """
+        # Get days parameter (default to 30 days)
+        days = int(request.query_params.get('days', 30))
+        priority = request.query_params.get('priority', None)
+        
+        # Calculate date range
+        now = timezone.now()
+        end_date = now + timedelta(days=days)
+        
+        # Get upcoming maintenance tasks
+        queryset = self.get_queryset().filter(
+            completed_date__isnull=True,
+            scheduled_date__gte=now,
+            scheduled_date__lte=end_date
+        )
+        
+        # Apply priority filter if provided
+        if priority:
+            queryset = queryset.filter(priority=priority)
+        
+        # Apply ordering
+        queryset = queryset.order_by('scheduled_date')
+        
+        # Paginate results if needed
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = PreventiveMaintenanceListSerializer(
+                page, 
+                many=True,
+                context={'request': request}
             )
-            job_image.save()
-            
-            # Link the JobImage to the PreventiveMaintenance record
-            setattr(pm, image_type, job_image)
-            pm.save(update_fields=[image_type])
+            return self.get_paginated_response(serializer.data)
+        
+        # Serialize and return
+        serializer = PreventiveMaintenanceListSerializer(
+            queryset, 
+            many=True,
+            context={'request': request}
+        )
+        
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def overdue(self, request):
+        """
+        Get overdue preventive maintenance tasks
+        Query params:
+        - priority: Filter by priority (optional)
+        - sort_by: Sort by 'date' or 'overdue_days' (default: 'date')
+        """
+        # Get parameters
+        priority = request.query_params.get('priority', None)
+        sort_by = request.query_params.get('sort_by', 'date')
+        
+        # Get current date
+        now = timezone.now()
+        
+        # Get overdue maintenance tasks
+        queryset = self.get_queryset().filter(
+            completed_date__isnull=True,
+            scheduled_date__lt=now
+        )
+        
+        # Apply priority filter if provided
+        if priority:
+            queryset = queryset.filter(priority=priority)
+        
+        # Apply sorting
+        if sort_by == 'overdue_days':
+            # Annotate with days overdue and sort by that
+            queryset = queryset.annotate(
+                days_overdue=ExpressionWrapper(
+                    now - F('scheduled_date'),
+                    output_field=fields.DurationField()
+                )
+            ).order_by('-days_overdue')
+        else:
+            # Default sort by scheduled date (oldest first)
+            queryset = queryset.order_by('scheduled_date')
+        
+        # Paginate results if needed
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = PreventiveMaintenanceListSerializer(
+                page, 
+                many=True,
+                context={'request': request}
+            )
+            return self.get_paginated_response(serializer.data)
+        
+        # Serialize and return
+        serializer = PreventiveMaintenanceListSerializer(
+            queryset, 
+            many=True,
+            context={'request': request}
+        )
+        
+        return Response(serializer.data)
     
     @action(detail=True, methods=['post'])
     def complete(self, request, pm_id=None):
-        """Mark a preventive maintenance task as completed"""
+        """
+        Mark a preventive maintenance task as completed
+        Request body should contain:
+        - completed_date: Date of completion (default: current date)
+        - notes: Optional notes
+        - after_image: Optional image taken after maintenance
+        """
+        # Get the maintenance record
         instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data)
+        
+        # Check if already completed
+        if instance.completed_date:
+            return Response(
+                {'detail': 'This maintenance task is already completed.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # If no completed_date provided, use current date
+        if 'completed_date' not in request.data:
+            request.data['completed_date'] = timezone.now().isoformat()
+        
+        # Validate and save
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        pm = serializer.save()
         
-        # Handle image uploads
-        self._process_image_upload(pm, 'before_image')
-        self._process_image_upload(pm, 'after_image')
+        # Calculate next_due_date based on frequency
+        completed_date = serializer.validated_data.get('completed_date') or timezone.now()
+        next_due_date = self._calculate_next_due_date(instance, completed_date)
         
-        # Return full serialized data
+        # Save with next_due_date and current user
+        serializer.save(
+            next_due_date=next_due_date,
+            updated_by=request.user
+        )
+        
+        # Return updated record
         return Response(
-            PreventiveMaintenanceSerializer(
-                instance, 
+            PreventiveMaintenanceDetailSerializer(
+                instance=serializer.instance,
                 context={'request': request}
             ).data
         )
     
-    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
-    def upload_before_image(self, request, pm_id=None):
-        """Upload before image for a PM task"""
-        return self._upload_image(request, pm_id, 'before_image')
+    def _calculate_next_due_date(self, instance, reference_date):
+        """
+        Calculate the next due date based on the maintenance frequency
+        Args:
+            instance: The maintenance instance
+            reference_date: The date to calculate from (usually completed_date)
+        Returns:
+            datetime: The next due date
+        """
+        if instance.frequency == 'daily':
+            return reference_date + timedelta(days=1)
+        elif instance.frequency == 'weekly':
+            return reference_date + timedelta(weeks=1)
+        elif instance.frequency == 'biweekly':
+            return reference_date + timedelta(weeks=2)
+        elif instance.frequency == 'monthly':
+            # Add one month (approximate)
+            return reference_date + timedelta(days=30)
+        elif instance.frequency == 'quarterly':
+            return reference_date + timedelta(days=90)
+        elif instance.frequency == 'biannually':
+            return reference_date + timedelta(days=182)
+        elif instance.frequency == 'annually':
+            return reference_date + timedelta(days=365)
+        elif instance.frequency == 'custom' and instance.custom_days:
+            return reference_date + timedelta(days=instance.custom_days)
+        else:
+            # Default to monthly if frequency is invalid
+            return reference_date + timedelta(days=30)
     
-    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
-    def upload_after_image(self, request, pm_id=None):
-        """Upload after image for a PM task"""
-        return self._upload_image(request, pm_id, 'after_image')
-    
-    def _upload_image(self, request, pm_id, image_type):
-        """Helper method to upload images"""
-        pm = self.get_object()
+    @action(detail=True, methods=['post'])
+    def upload_images(self, request, pm_id=None):
+        """
+        Upload images for a preventive maintenance task
+        Request should contain:
+        - images: List of image files
+        - image_types: List of image types (before/after)
+        """
+        instance = self.get_object()
         
-        if 'image' not in request.data:
-            return Response({'error': 'No image provided'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Create new JobImage
-        job_image = JobImage.objects.create(
-            job=pm.job,
-            image=request.data['image'],
-            uploaded_by=request.user
-        )
-        
-        # Link the image to the PM
-        previous_image = getattr(pm, image_type)
-        if previous_image:
-            # Optionally delete the previous image if needed
-            # previous_image.delete()
-            pass
-        
-        setattr(pm, image_type, job_image)
-        pm.save(update_fields=[image_type])
-        
-        # Return the updated PM record
-        serializer = PreventiveMaintenanceSerializer(pm, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
-    @action(detail=False)
-    def upcoming(self, request):
-        """List upcoming maintenance tasks"""
-        # Default to 30 days, but allow override
-        days = request.query_params.get('days', 30)
-        try:
-            days = int(days)
-        except ValueError:
-            days = 30
-        
-        end_date = timezone.now() + timezone.timedelta(days=days)
-        
-        queryset = PreventiveMaintenance.objects.filter(
-            scheduled_date__lte=end_date,
-            completed_date__isnull=True
-        ).select_related('job', 'created_by', 'before_image', 'after_image')
-        
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = PreventiveMaintenanceSerializer(
-                page, 
-                many=True, 
-                context={'request': request}
+        # Check if images are provided
+        if 'images' not in request.FILES:
+            return Response(
+                {'detail': 'No images provided.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            return self.get_paginated_response(serializer.data)
         
-        serializer = PreventiveMaintenanceSerializer(
-            queryset, 
-            many=True, 
+        # Get image types
+        image_types = request.POST.getlist('image_types', [])
+        if not image_types or len(image_types) != len(request.FILES.getlist('images')):
+            return Response(
+                {'detail': 'Image types must be provided for each image.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Process each image
+        images = request.FILES.getlist('images')
+        updated = False
+        
+        for i, image in enumerate(images):
+            image_type = image_types[i] if i < len(image_types) else None
+            
+            if image_type == 'before':
+                instance.before_image = image
+                updated = True
+            elif image_type == 'after':
+                instance.after_image = image
+                updated = True
+        
+        if updated:
+            instance.save(update_fields=['before_image', 'after_image'])
+            instance.updated_by = request.user
+            instance.save(update_fields=['updated_by'])
+        
+        # Return updated record
+        serializer = PreventiveMaintenanceDetailSerializer(
+            instance=instance,
             context={'request': request}
         )
+        
         return Response(serializer.data)
     
-    @action(detail=False)
-    def overdue(self, request):
-        """List overdue maintenance tasks"""
-        queryset = PreventiveMaintenance.objects.filter(
-            scheduled_date__lt=timezone.now(),
-            completed_date__isnull=True
-        ).select_related('job', 'created_by', 'before_image', 'after_image')
+    @action(detail=True, methods=['post'])
+    def reschedule(self, request, pm_id=None):
+        """
+        Reschedule a maintenance task
+        Request body should contain:
+        - scheduled_date: New scheduled date
+        - reason: Optional reason for rescheduling
+        """
+        instance = self.get_object()
         
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = PreventiveMaintenanceSerializer(
-                page, 
-                many=True, 
-                context={'request': request}
+        # Check if already completed
+        if instance.completed_date:
+            return Response(
+                {'detail': 'Cannot reschedule a completed task.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            return self.get_paginated_response(serializer.data)
         
-        serializer = PreventiveMaintenanceSerializer(
-            queryset, 
-            many=True, 
+        # Check if scheduled_date is provided
+        if 'scheduled_date' not in request.data:
+            return Response(
+                {'detail': 'Scheduled date must be provided.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update the scheduled date
+        instance.scheduled_date = request.data['scheduled_date']
+        
+        # Add reason if provided
+        if 'reason' in request.data:
+            if not instance.notes:
+                instance.notes = ""
+            instance.notes += f"\n[{timezone.now().strftime('%Y-%m-%d %H:%M')}] Rescheduled: {request.data['reason']}"
+        
+        # Save changes
+        instance.updated_by = request.user
+        instance.save()
+        
+        # Return updated record
+        serializer = PreventiveMaintenanceDetailSerializer(
+            instance=instance,
             context={'request': request}
         )
+        
         return Response(serializer.data)
-
+    
+    @action(detail=False, methods=['get'])
+    def by_priority(self, request):
+        """
+        Get maintenance tasks sorted by priority and status
+        Returns tasks in the order: high-priority overdue, medium-priority overdue,
+        low-priority overdue, high-priority upcoming, etc.
+        """
+        now = timezone.now()
+        
+        # Get priority parameter (optional)
+        priority = request.query_params.get('priority', None)
+        
+        # Base queryset
+        queryset = self.get_queryset()
+        
+        # Filter by priority if provided
+        if priority:
+            queryset = queryset.filter(priority=priority)
+        
+        # Categorize tasks
+        overdue = queryset.filter(completed_date__isnull=True, scheduled_date__lt=now)
+        upcoming = queryset.filter(completed_date__isnull=True, scheduled_date__gte=now)
+        
+        # Create priority lists
+        priority_mapping = {
+            'high': 1,
+            'medium': 2,
+            'low': 3
+        }
+        
+        # Annotate with priority order and sort
+        overdue = overdue.annotate(
+            priority_order=Case(
+                When(priority='high', then=Value(1)),
+                When(priority='medium', then=Value(2)),
+                When(priority='low', then=Value(3)),
+                default=Value(4),
+                output_field=fields.IntegerField()
+            )
+        ).order_by('priority_order', 'scheduled_date')
+        
+        upcoming = upcoming.annotate(
+            priority_order=Case(
+                When(priority='high', then=Value(1)),
+                When(priority='medium', then=Value(2)),
+                When(priority='low', then=Value(3)),
+                default=Value(4),
+                output_field=fields.IntegerField()
+            )
+        ).order_by('priority_order', 'scheduled_date')
+        
+        # Combine the querysets
+        combined_queryset = list(overdue) + list(upcoming)
+        
+        # Paginate if needed
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_results = combined_queryset[start_idx:end_idx]
+        
+        # Serialize and return
+        serializer = PreventiveMaintenanceListSerializer(
+            paginated_results, 
+            many=True,
+            context={'request': request}
+        )
+        
+        # Prepare pagination info
+        total_items = len(combined_queryset)
+        total_pages = math.ceil(total_items / page_size)
+        
+        response_data = {
+            'count': total_items,
+            'total_pages': total_pages,
+            'current_page': page,
+            'results': serializer.data
+        }
+        
+        return Response(response_data)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
