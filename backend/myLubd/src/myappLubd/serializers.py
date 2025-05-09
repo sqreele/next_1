@@ -412,7 +412,7 @@ class PreventiveMaintenanceCompleteSerializer(serializers.ModelSerializer):
     
     
 class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
-    job_id = serializers.CharField(source='job.job_id', read_only=True)
+    
     topics = TopicSerializer(many=True, read_only=True)
     before_image_url = serializers.SerializerMethodField()
     after_image_url = serializers.SerializerMethodField()
@@ -420,7 +420,7 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
     class Meta:
         model = PreventiveMaintenance
         fields = [
-            'pm_id', 'job_id', 'topics', 'scheduled_date', 'completed_date',
+            'pm_id', 'pmtitle' , 'topics', 'scheduled_date', 'completed_date',
             'frequency', 'custom_days', 'next_due_date',
             'before_image', 'after_image', 'before_image_url', 'after_image_url', 'notes'
         ]

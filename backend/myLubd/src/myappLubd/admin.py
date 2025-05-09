@@ -27,17 +27,7 @@ class JobImageInline(admin.TabularInline):
     image_preview.short_description = 'Preview'
 
 
-class PreventiveMaintenanceInline(admin.TabularInline):
-    model = PreventiveMaintenance
-    extra = 0
-    fields = ('pm_id', 'scheduled_date', 'frequency', 'custom_days', 'completed_date', 'next_due_date', 'created_by')
-    readonly_fields = ('pm_id', 'next_due_date')
-    raw_id_fields = ('created_by',)
-    show_change_link = True
-    can_delete = True
-    max_num = 10
-    verbose_name = "Preventive Maintenance Schedule"
-    verbose_name_plural = "Preventive Maintenance Schedules"
+# Remove PreventiveMaintenanceInline since it's no longer related to Job model
 
 # ModelAdmins
 
@@ -49,7 +39,7 @@ class JobAdmin(admin.ModelAdmin):
     search_fields = ['job_id', 'description', 'user__username', 'updated_by__username', 'topics__title']
     readonly_fields = ['job_id', 'created_at', 'updated_at', 'completed_at', 'updated_by']
     filter_horizontal = ['rooms', 'topics']
-    inlines = [JobImageInline, PreventiveMaintenanceInline]
+    inlines = [JobImageInline]  # Removed PreventiveMaintenanceInline
     fieldsets = (
         ('Job Info', {
             'fields': ('job_id', 'description', 'remarks', 'status', 'priority', 'is_defective', 'is_preventivemaintenance')
@@ -78,27 +68,13 @@ class JobAdmin(admin.ModelAdmin):
 
     def save_formset(self, request, form, formset, change):
         instances = formset.save(commit=False)
-        job_instance = form.instance
-        job_needs_resave_for_pm_flag = False
-
+        
         for instance in instances:
             if isinstance(instance, JobImage):
                 if not instance.pk and not instance.uploaded_by_id:  # New JobImage
                     instance.uploaded_by = request.user
             
-            elif isinstance(instance, PreventiveMaintenance):
-                if not instance.pk and not instance.created_by_id:  # New PreventiveMaintenance
-                    instance.created_by = request.user
-                
-                # Ensure related job is marked as preventive maintenance
-                if job_instance and not job_instance.is_preventivemaintenance:
-                    job_instance.is_preventivemaintenance = True
-                    job_needs_resave_for_pm_flag = True
-            
             instance.save() # Save the inline instance
-
-        if job_needs_resave_for_pm_flag and job_instance.pk:
-            job_instance.save(update_fields=['is_preventivemaintenance'])
             
         formset.save_m2m()
 
@@ -235,7 +211,7 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
     list_display = (
         'pm_id',
         'pmtitle',
-        'get_topics_for_job',
+        'get_topics_display',
         'scheduled_date',
         'completed_date',
         'frequency',
@@ -248,15 +224,16 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
         ('completed_date', admin.EmptyFieldListFilter),
         'scheduled_date',
         'next_due_date',
-        'job__is_preventivemaintenance'
+        # Removed job__is_preventivemaintenance filter
     )
-    search_fields = ('pm_id', 'notes', 'job__topics__title')
+    search_fields = ('pm_id', 'notes', 'pmtitle', 'topics__title')
     date_hierarchy = 'scheduled_date'
+    filter_horizontal = ['topics']  # Add this for topics many-to-many relationship
    
     readonly_fields = ('pm_id', 'next_due_date', 'before_image_preview', 'after_image_preview')
     fieldsets = (
         ('Identification', {
-            'fields': ('pm_id', 'job', 'created_by')
+            'fields': ('pm_id', 'pmtitle', 'created_by')
         }),
         ('Schedule', {
             'fields': ('scheduled_date', 'frequency', 'custom_days', 'completed_date', 'next_due_date')
@@ -264,44 +241,29 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
         ('Documentation & Images', {
             'fields': ('notes', 'before_image', 'before_image_preview', 'after_image', 'after_image_preview')
         }),
+        ('Related Items', {
+            'fields': ('topics',)
+        }),
     )
     actions = ['mark_completed']
 
-    def pmtitle(self, obj):
-        """Get the title of the PM job"""
-        if obj.job:
-            return obj.job.title
-        return f"PM #{obj.pm_id}"
-    pmtitle.short_description = 'PM Title'
-    pmtitle.admin_order_field = 'job__title'
-
-    def get_job_id_link(self, obj):
-        if obj.job:
-            from django.urls import reverse
-            link = reverse("admin:myappLubd_job_change", args=[obj.job.id])
-            return format_html('<a href="{}">{}</a>', link, obj.job.job_id)
-        return "N/A"
-    get_job_id_link.short_description = 'Job ID'
-    get_job_id_link.admin_order_field = 'job__job_id'
-
-    def get_topics_for_job(self, obj):
-        if obj.job:
-            return ", ".join([topic.title for topic in obj.job.topics.all()])
-        return "N/A"
-    get_topics_for_job.short_description = 'Job Topics'
+    def get_topics_display(self, obj):
+        """Display topics associated with this PM"""
+        return ", ".join([topic.title for topic in obj.topics.all()])
+    get_topics_display.short_description = 'Topics'
 
     def get_status_display(self, obj):
         if obj.completed_date:
             return format_html('<span style="color: green;">Completed</span>')
-        elif obj.scheduled_date and obj.scheduled_date < timezone.now().date():
+        elif obj.scheduled_date and obj.scheduled_date < timezone.now():
              return format_html('<span style="color: red;">Overdue</span>')
-        elif obj.next_due_date and obj.next_due_date < timezone.now().date():
+        elif obj.next_due_date and obj.next_due_date < timezone.now():
              return format_html('<span style="color: orange;">Next Due Overdue</span>')
         return format_html('<span style="color: blue;">Scheduled</span>')
     get_status_display.short_description = 'Status'
     get_status_display.admin_order_field = 'completed_date'
 
-    def created_by_user(self,obj):
+    def created_by_user(self, obj):
         if obj.created_by:
             return obj.created_by.username
         return "N/A"
@@ -310,17 +272,11 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         # Optimize queries by prefetching related objects
-        return super().get_queryset(request).select_related('job', 'created_by').prefetch_related('job__topics')
+        return super().get_queryset(request).select_related('created_by').prefetch_related('topics')
 
     def save_model(self, request, obj, form, change):
         if not obj.pk and not obj.created_by_id:  # If new object and created_by not set
             obj.created_by = request.user
-
-        # Ensure the related job is marked as preventive maintenance
-        if obj.job and not obj.job.is_preventivemaintenance:
-            obj.job.is_preventivemaintenance = True
-            obj.job.save(update_fields=['is_preventivemaintenance'])
-            
         super().save_model(request, obj, form, change)
 
     def mark_completed(self, request, queryset):
@@ -336,14 +292,14 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
     mark_completed.short_description = "Mark selected tasks as completed"
 
     def before_image_preview(self, obj):
-        if obj.before_image and obj.before_image.image and hasattr(obj.before_image.image, 'url'):
-            return format_html('<img src="{}" width="100" />', obj.before_image.image.url)
+        if obj.before_image and hasattr(obj.before_image, 'url'):
+            return format_html('<img src="{}" width="100" />', obj.before_image.url)
         return "No Before Image"
     before_image_preview.short_description = 'Before Image Preview'
 
     def after_image_preview(self, obj):
-        if obj.after_image and obj.after_image.image and hasattr(obj.after_image.image, 'url'):
-            return format_html('<img src="{}" width="100" />', obj.after_image.image.url)
+        if obj.after_image and hasattr(obj.after_image, 'url'):
+            return format_html('<img src="{}" width="100" />', obj.after_image.url)
         return "No After Image"
     after_image_preview.short_description = 'After Image Preview'
 

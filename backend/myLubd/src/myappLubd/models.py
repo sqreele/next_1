@@ -34,12 +34,7 @@ class PreventiveMaintenance(models.Model):
         editable=False
     )
     
-    job = models.ForeignKey(
-        'Job',  # Use string reference to avoid circular import
-        on_delete=models.CASCADE,
-        related_name='preventive_maintenances',
-        help_text="The related maintenance job"
-    )
+    # Removed Job foreign key
     
     # Add many-to-many relationship with Topic
     topics = models.ManyToManyField(
@@ -97,7 +92,7 @@ class PreventiveMaintenance(models.Model):
         ]
 
     def __str__(self):
-        return f"PM {self.pm_id} - {self.job.job_id}"
+        return f"PM {self.pm_id} - {self.pmtitle}"
 
     def process_image(self, image_file):
         """Process and resize the image, converting it to WebP format."""
@@ -245,7 +240,9 @@ class PreventiveMaintenance(models.Model):
             os.remove(before_image_path)
             
         if after_image_path and os.path.isfile(after_image_path):
-            os.remove(after_image_path)   
+            os.remove(after_image_path)
+
+
 def get_upload_path(instance, filename):
     """Generate a unique path for uploaded files"""
     ext = Path(filename).suffix
