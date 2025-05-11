@@ -414,16 +414,33 @@ class PreventiveMaintenanceCompleteSerializer(serializers.ModelSerializer):
 class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
     
     topics = TopicSerializer(many=True, read_only=True)
+    topic_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        allow_empty=True
+    )
     before_image_url = serializers.SerializerMethodField()
     after_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = PreventiveMaintenance
         fields = [
-            'pm_id', 'pmtitle' , 'topics', 'scheduled_date', 'completed_date',
+            'pm_id', 'pmtitle', 'topics', 'topic_ids', 'scheduled_date', 'completed_date',
             'frequency', 'custom_days', 'next_due_date',
             'before_image', 'after_image', 'before_image_url', 'after_image_url', 'notes'
         ]
+        
+        # Add this to make fields optional that don't have default values
+        extra_kwargs = {
+            'completed_date': {'required': False},
+            'next_due_date': {'required': False},
+            'custom_days': {'required': False},
+            'notes': {'required': False},
+            'pmtitle': {'required': False},
+            'before_image': {'required': False},
+            'after_image': {'required': False},
+        }
 
     def get_before_image_url(self, obj):
         request = self.context.get('request')
@@ -436,3 +453,13 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
         if obj.after_image and request:
             return request.build_absolute_uri(obj.after_image.url)
         return None
+    
+    def create(self, validated_data):
+        topic_ids = validated_data.pop('topic_ids', [])
+        instance = super().create(validated_data)
+        
+        # Associate topics with the instance
+        if topic_ids:
+            instance.topics.set(topic_ids)
+        
+        return instance
