@@ -433,43 +433,58 @@ class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
             return reference_date + timedelta(days=30)
     
     @action(detail=True, methods=['post'])
+  
     def upload_images(self, request, pm_id=None):
         """
         Upload images for a preventive maintenance task
-        Request should contain:
-        - images: List of image files
-        - image_types: List of image types (before/after)
+        Request should contain either:
+        - images and image_types fields (multiple images)
+        OR
+        - before_image and after_image fields (direct image fields)
         """
         instance = self.get_object()
         
-        # Check if images are provided
-        if 'images' not in request.FILES:
-            return Response(
-                {'detail': 'No images provided.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Get image types
-        image_types = request.POST.getlist('image_types', [])
-        if not image_types or len(image_types) != len(request.FILES.getlist('images')):
-            return Response(
-                {'detail': 'Image types must be provided for each image.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Process each image
-        images = request.FILES.getlist('images')
-        updated = False
-        
-        for i, image in enumerate(images):
-            image_type = image_types[i] if i < len(image_types) else None
+        # Check for traditional images + image_types format
+        if 'images' in request.FILES:
+            # Get image types
+            image_types = request.POST.getlist('image_types', [])
+            if not image_types or len(image_types) != len(request.FILES.getlist('images')):
+                return Response(
+                    {'detail': 'Image types must be provided for each image.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             
-            if image_type == 'before':
-                instance.before_image = image
+            # Process each image
+            images = request.FILES.getlist('images')
+            updated = False
+            
+            for i, image in enumerate(images):
+                image_type = image_types[i] if i < len(image_types) else None
+                
+                if image_type == 'before':
+                    instance.before_image = image
+                    updated = True
+                elif image_type == 'after':
+                    instance.after_image = image
+                    updated = True
+        
+        # Check for direct before_image and after_image fields
+        else:
+            updated = False
+            
+            if 'before_image' in request.FILES:
+                instance.before_image = request.FILES['before_image']
                 updated = True
-            elif image_type == 'after':
-                instance.after_image = image
+                
+            if 'after_image' in request.FILES:
+                instance.after_image = request.FILES['after_image']
                 updated = True
+                
+            if not updated:
+                return Response(
+                    {'detail': 'No images provided. Use either "images" + "image_types" or "before_image"/"after_image" fields.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
         if updated:
             instance.save(update_fields=['before_image', 'after_image'])
@@ -483,7 +498,6 @@ class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
         )
         
         return Response(serializer.data)
-    
     @action(detail=True, methods=['post'])
     def reschedule(self, request, pm_id=None):
         """
