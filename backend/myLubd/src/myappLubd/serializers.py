@@ -321,7 +321,7 @@ class PreventiveMaintenanceDetailSerializer(serializers.ModelSerializer):
             'next_due_date': {'required': False},
         }
     
-    def0 def get_pmtitle(self, obj):
+    def get_pmtitle(self, obj):
         return obj.pmtitle
     
     def get_before_image_url(self, obj):
