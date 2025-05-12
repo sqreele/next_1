@@ -6,6 +6,7 @@ from .views import (
     RoomViewSet, TopicViewSet, JobViewSet, PropertyViewSet,
     UserProfileViewSet, UserViewSet
 )
+from .views import PreventiveMaintenanceImageUploadView
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView
@@ -47,7 +48,7 @@ urlpatterns = [
     
     # Health check
     path('health/', health_check, name='health_check'),
-    
+     path('api/preventive-maintenance/<int:pm_id>/upload-images/', PreventiveMaintenanceImageUploadView.as_view(), name='upload_pm_images'),
     # Preventive maintenance endpoints
     path('api/preventive-maintenance/', views.get_preventive_maintenance_data, name='preventive_maintenance_data'),
     path('api/preventive-maintenance/jobs/', views.get_preventive_maintenance_jobs, name='preventive_maintenance_jobs'),

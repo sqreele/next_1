@@ -19,6 +19,10 @@ from .serializers import (
     PreventiveMaintenanceCompleteSerializer, PreventiveMaintenanceListSerializer,
     PropertyPMStatusSerializer
 )
+from PIL import Image
+from io import BytesIO
+from django.core.files.base import ContentFile
+
 import math
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import viewsets, status, permissions
@@ -1559,3 +1563,37 @@ class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
                 })
         
         return Response(calendar_events)
+class PreventiveMaintenanceImageUploadView(APIView):
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, pm_id):
+        try:
+            pm = PreventiveMaintenance.objects.get(pm_id=pm_id)
+
+            before_image = request.FILES.get('before_image')
+            after_image = request.FILES.get('after_image')
+
+            def process_image(image_file, filename_prefix):
+                img = Image.open(image_file)
+                img = img.convert('RGB')  # Ensure compatibility with WebP
+                img.thumbnail((800, 800))  # Resize to fit within 800x800
+
+                buffer = BytesIO()
+                img.save(buffer, format='WEBP', quality=85)
+                buffer.seek(0)
+
+                return ContentFile(buffer.read(), name=f"{filename_prefix}.webp")
+
+            if before_image:
+                pm.before_image = process_image(before_image, "before_image")
+
+            if after_image:
+                pm.after_image = process_image(after_image, "after_image")
+
+            pm.save()
+            return Response({'message': 'Images uploaded and processed successfully'}, status=status.HTTP_200_OK)
+
+        except PreventiveMaintenance.DoesNotExist:
+            return Response({'error': 'PreventiveMaintenance not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
