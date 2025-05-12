@@ -5,6 +5,8 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
+from django.core.validators import FileExtensionValidator
+import math
 
 class UserSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
@@ -281,12 +283,24 @@ class PreventiveMaintenanceListSerializer(serializers.ModelSerializer):
 
 class PreventiveMaintenanceDetailSerializer(serializers.ModelSerializer):
     """Detailed serializer for single item view, creation and updates"""
-    pmtitle =serializers.SerializerMethodField()
+    pmtitle = serializers.SerializerMethodField()
     before_image_url = serializers.SerializerMethodField()
     after_image_url = serializers.SerializerMethodField()
     is_overdue = serializers.SerializerMethodField()
     created_by = UserSerializer(read_only=True)
     days_remaining = serializers.SerializerMethodField()
+    
+    # Explicitly define image fields
+    before_image = serializers.ImageField(
+        required=False,
+        allow_null=True,
+        validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png'])]
+    )
+    after_image = serializers.ImageField(
+        required=False,
+        allow_null=True,
+        validators=[FileExtensionValidator(allowed_extensions=['jpg', 'jpeg', 'png'])]
+    )
     
     class Meta:
         model = PreventiveMaintenance
@@ -294,9 +308,21 @@ class PreventiveMaintenanceDetailSerializer(serializers.ModelSerializer):
             'pm_id', 'job', 'topics', 'scheduled_date', 'completed_date',
             'frequency', 'custom_days', 'next_due_date',
             'before_image', 'after_image', 'before_image_url', 'after_image_url',
-            'notes', 'created_by', 'updated_at', 'is_overdue', 'days_remaining'
+            'notes', 'created_by', 'updated_at', 'is_overdue', 'days_remaining', 'pmtitle'
         ]
         read_only_fields = ['pm_id', 'created_by', 'updated_at', 'next_due_date']
+        extra_kwargs = {
+            'before_image': {'required': False},
+            'after_image': {'required': False},
+            'notes': {'required': False},
+            'pmtitle': {'required': False},
+            'custom_days': {'required': False},
+            'completed_date': {'required': False},
+            'next_due_date': {'required': False},
+        }
+    
+    def0 def get_pmtitle(self, obj):
+        return obj.pmtitle
     
     def get_before_image_url(self, obj):
         """Get the full URL for the before image"""
@@ -318,41 +344,33 @@ class PreventiveMaintenanceDetailSerializer(serializers.ModelSerializer):
     
     def get_is_overdue(self, obj):
         """Check if maintenance is overdue"""
-        from django.utils import timezone
         if not obj.completed_date and obj.scheduled_date < timezone.now():
             return True
         return False
     
     def get_days_remaining(self, obj):
         """Calculate days remaining until scheduled date or next due date"""
-        from django.utils import timezone
-        import math
-        
         now = timezone.now()
         
         if obj.completed_date:
-            # If completed, show days until next due date
             if obj.next_due_date:
                 delta = obj.next_due_date - now
-                return math.ceil(delta.total_seconds() / 86400)  # Convert to days and round up
+                return math.ceil(delta.total_seconds() / 86400)
             return None
         else:
-            # If not completed, show days until scheduled date
             delta = obj.scheduled_date - now
-            return math.ceil(delta.total_seconds() / 86400)  # Convert to days and round up
+            return math.ceil(delta.total_seconds() / 86400)
     
     def validate(self, data):
         """Custom validation for form data"""
         frequency = data.get('frequency')
         custom_days = data.get('custom_days')
         
-        # Validate custom frequency
         if frequency == 'custom' and not custom_days:
             raise serializers.ValidationError({
                 'custom_days': 'Custom days value is required when frequency is set to Custom'
             })
         
-        # Validate completed date in relation to scheduled date
         scheduled_date = data.get('scheduled_date')
         completed_date = data.get('completed_date')
         

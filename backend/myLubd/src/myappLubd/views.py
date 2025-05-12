@@ -78,6 +78,7 @@ class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
     """
     serializer_class = PreventiveMaintenanceSerializer
     lookup_field = 'pm_id'
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
     filterset_fields = ['topics__id', 'frequency', 'status']
     search_fields = ['pm_id', 'title', 'description']
     ordering_fields = ['scheduled_date', 'created_date', 'frequency']
