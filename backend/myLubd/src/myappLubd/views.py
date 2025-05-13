@@ -87,6 +87,7 @@ class PreventiveMaintenanceViewSet(viewsets.ModelViewSet):
     search_fields = ['pm_id', 'title', 'description']
     ordering_fields = ['scheduled_date', 'created_date', 'frequency']
     ordering = ['-scheduled_date']
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     
     def get_queryset(self):
         """
