@@ -9,9 +9,68 @@ from .models import (
     JobImage,
     UserProfile,
     PreventiveMaintenance,
-    Session
+    Session,
+    Machine 
 )
+# Add this new admin class for Machine
+@admin.register(Machine)
+class MachineAdmin(admin.ModelAdmin):
+    list_display = [
+        'machine_id', 
+        'name', 
+        'property_link', 
+        'location', 
+        'status', 
+        'installation_date', 
+        'last_maintenance_date',
+        'next_maintenance_date'
+    ]
+    list_filter = ['status', 'property', 'created_at', 'installation_date']
+    search_fields = ['machine_id', 'name', 'description', 'location']
+    readonly_fields = ['machine_id', 'created_at', 'updated_at', 'next_maintenance_date']
+    filter_horizontal = ['preventive_maintenances']
+    
+    fieldsets = (
+        ('Machine Information', {
+            'fields': ('machine_id', 'name', 'description', 'location', 'status')
+        }),
+        ('Property & Maintenance', {
+            'fields': ('property', 'preventive_maintenances', 'installation_date', 'last_maintenance_date')
+        }),
+        ('Timestamps', {
+            'classes': ('collapse',),
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
 
+    def property_link(self, obj):
+        if obj.property:
+            from django.urls import reverse
+            link = reverse("admin:myappLubd_property_change", args=[obj.property.id])
+            return format_html('<a href="{}">{}</a>', link, obj.property.name)
+        return "No Property"
+    property_link.short_description = 'Property'
+    property_link.admin_order_field = 'property'
+
+    def next_maintenance_date(self, obj):
+        next_date = obj.get_next_maintenance_date()
+        if next_date:
+            if next_date < timezone.now():
+                return format_html('<span style="color: red;">{}</span>', next_date.strftime('%Y-%m-%d %H:%M'))
+            return next_date.strftime('%Y-%m-%d %H:%M')
+        return "No scheduled maintenance"
+    next_maintenance_date.short_description = 'Next Maintenance'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('property').prefetch_related('preventive_maintenances')
+
+    actions = ['schedule_maintenance']
+
+    def schedule_maintenance(self, request, queryset):
+        # This would ideally redirect to a custom view for scheduling maintenance
+        # For simplicity, we'll just show a message here
+        self.message_user(request, f"Selected {queryset.count()} machines for maintenance scheduling. Please use the preventive maintenance section to create schedules.")
+    schedule_maintenance.short_description = "Schedule maintenance for selected machines"
 # Inlines
 class JobImageInline(admin.TabularInline):
     model = JobImage
@@ -200,7 +259,8 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
         'frequency',
         'next_due_date',
         'get_status_display',
-        'created_by_user'
+        'created_by_user',
+        'get_machines_display',
     )
     list_filter = (
         'frequency',
@@ -279,6 +339,9 @@ class PreventiveMaintenanceAdmin(admin.ModelAdmin):
             return format_html('<img src="{}" style="max-width: 100px; max-height: 100px;" />', obj.after_image.url)
         return "No After Image"
     after_image_preview.short_description = 'After Image Preview'
+    def get_machines_display(self, obj):
+        return ", ".join([machine.name for machine in obj.machines.all()])
+    get_machines_display.short_description = 'Machines'
 
 @admin.register(Session)
 class SessionAdmin(admin.ModelAdmin):

@@ -712,3 +712,76 @@ class Session(models.Model):
         return f"Session for {self.user.username} - Expires: {self.expires_at}"
     
     
+class Machine(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('maintenance', 'Under Maintenance'),
+        ('repair', 'Under Repair'),
+        ('inactive', 'Inactive'),
+        ('retired', 'Retired'),
+    ]
+
+    id = models.AutoField(primary_key=True)
+    machine_id = models.CharField(
+        max_length=50,
+        unique=True,
+        blank=True,
+        editable=False
+    )
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, null=True)
+    location = models.CharField(max_length=200, blank=True, null=True)
+    
+    # Relationship with Property
+    property = models.ForeignKey(
+        'Property',
+        on_delete=models.CASCADE,
+        related_name='machines'
+    )
+    
+    # Many-to-many relationship with PreventiveMaintenance
+    preventive_maintenances = models.ManyToManyField(
+        'PreventiveMaintenance',
+        related_name='machines',
+        blank=True
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='active'
+    )
+    
+    installation_date = models.DateField(null=True, blank=True)
+    last_maintenance_date = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Machine'
+        verbose_name_plural = 'Machines'
+        indexes = [
+            models.Index(fields=['machine_id']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.machine_id})"
+    
+    def save(self, *args, **kwargs):
+        if not self.machine_id:
+            timestamp = timezone.now().strftime('%y')
+            unique_id = get_random_string(length=8, allowed_chars='0123456789ABCDEF')
+            self.machine_id = f"M{timestamp}{unique_id}"
+        super().save(*args, **kwargs)
+    
+    def get_next_maintenance_date(self):
+        """Get the nearest upcoming maintenance date"""
+        upcoming_maintenances = self.preventive_maintenances.filter(
+            next_due_date__gt=timezone.now()
+        ).order_by('next_due_date')
+        
+        if upcoming_maintenances.exists():
+            return upcoming_maintenances.first().next_due_date
+        return None
