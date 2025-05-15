@@ -7,12 +7,21 @@ from django.core.exceptions import ValidationError
 from PIL import Image
 from io import BytesIO
 import os
+import requests
 from django.core.files.base import ContentFile
 from pathlib import Path
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.conf import settings
+import logging
+
+# Set up logger
+logger = logging.getLogger(__name__)
+
+# Use get_user_model() for proper user model reference
 from django.contrib.auth import get_user_model
 User = get_user_model()
+
 class PreventiveMaintenance(models.Model):
     FREQUENCY_CHOICES = [
         ('daily', 'Daily'),
@@ -33,8 +42,6 @@ class PreventiveMaintenance(models.Model):
         blank=True,
         editable=False
     )
-    
-    # Removed Job foreign key
     
     # Add many-to-many relationship with Topic
     topics = models.ManyToManyField(
@@ -299,7 +306,6 @@ class Property(models.Model):
 
 
 class Room(models.Model):
-    
     room_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100, unique=True)
     room_type = models.CharField(max_length=50, db_index=True)
@@ -351,6 +357,7 @@ class Topic(models.Model):
 
     def __str__(self):
         return self.title
+
 
 class JobImage(models.Model):
     # Image size configuration
@@ -440,7 +447,7 @@ class JobImage(models.Model):
                 self.image.save(
                     webp_name,
                     ContentFile(processed_image.getvalue()),  # Save the processed image
-                    save=False  # Don’t save the model yet, we still need to handle other fields
+                    save=False  # Don't save the model yet, we still need to handle other fields
                 )
 
                 # Close the processed image to free memory
@@ -460,6 +467,7 @@ class JobImage(models.Model):
 
         super().delete(*args, **kwargs)
 
+
 class Job(models.Model):
     is_preventivemaintenance = models.BooleanField(default=False, db_index=True)
     STATUS_CHOICES = [
@@ -474,7 +482,6 @@ class Job(models.Model):
         ('low', 'Low'),
         ('medium', 'Medium'),
         ('high', 'High'),
-     
     ]
    
     job_id = models.CharField(
@@ -547,6 +554,7 @@ class Job(models.Model):
         timestamp = timezone.now().strftime('%y')
         unique_id = get_random_string(length=6, allowed_chars='0123456789ABCDEF')
         return f"j{timestamp}{unique_id}"
+        
     def create_preventive_maintenance(self, scheduled_date, frequency='monthly', created_by=None):
         """Create a preventive maintenance schedule for this job"""
         if not self.is_preventivemaintenance:
@@ -573,16 +581,14 @@ class UserProfile(models.Model):
         related_name='user_profiles',
         blank=True
     )
-
-    def __str__(self):
-        return f"{self.user.username}'s Profile"
-  # New fields for Google Auth
-      # Google OAuth fields
+    
+    # Google OAuth fields
     google_id = models.CharField(max_length=100, blank=True, null=True)
     email_verified = models.BooleanField(default=False)
     access_token = models.TextField(blank=True, null=True)
     refresh_token = models.TextField(blank=True, null=True)
     login_provider = models.CharField(max_length=50, blank=True, null=True)
+    last_login_google = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [
@@ -635,11 +641,21 @@ class UserProfile(models.Model):
     def update_from_google_data(self, google_data):
         """Update profile with data from Google"""
         if google_data.get('picture'):
-            self.profile_image = google_data['picture']
+            # Try to download the profile image
+            try:
+                response = requests.get(google_data['picture'], stream=True, timeout=10)
+                response.raise_for_status()
+                
+                filename = f"profile_image_{self.user.id}.jpg"
+                self.profile_image.save(filename, ContentFile(response.content), save=False)
+                logger.info(f"Profile image saved successfully from Google data")
+            except Exception as e:
+                logger.error(f"Error downloading profile image: {e}")
         
         self.google_id = google_data.get('sub')
         self.email_verified = google_data.get('email_verified', False)
         self.login_provider = 'google'
+        self.last_login_google = timezone.now()
         
         # Update user model fields
         self.user.first_name = google_data.get('given_name', '')
@@ -649,11 +665,13 @@ class UserProfile(models.Model):
         self.user.save()
         self.save()
 
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     """Create a UserProfile for every new User"""
     if created:
         UserProfile.objects.create(user=instance)
+
 
 @receiver(post_save, sender=User)
 def save_user_profile(sender, instance, **kwargs):
@@ -661,42 +679,8 @@ def save_user_profile(sender, instance, **kwargs):
     if not hasattr(instance, 'userprofile'):
         UserProfile.objects.create(user=instance)
     instance.userprofile.save()
-import requests
-import os
-from django.conf import settings
-from django.core.files.base import ContentFile
-import logging
 
-logger = logging.getLogger(__name__)
 
-def update_from_google_data(self, idinfo):
-    profile_image_url = idinfo.get('picture')
-    if profile_image_url:
-        logger.info(f"Processing profile image URL: {profile_image_url}")  # Log URL
-        try:
-            response = requests.get(profile_image_url, stream=True, timeout=10)  # Download image with timeout
-            response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-
-            filename = f"profile_image_{self.user.id}.jpg"  # Generate unique filename
-            profile_image_path = os.path.join(settings.MEDIA_ROOT, filename)  # Correct path
-
-            logger.info(f"Generated profile image path: {profile_image_path}")  # Log path before saving
-            self.profile_image.save(filename, ContentFile(response.content), save=False) # Save using ContentFile
-            logger.info(f"Profile image saved successfully to: {self.profile_image.path}")  # Log save success
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error downloading profile image from {profile_image_url}: {e}") # Log download error
-            logger.exception(e) # Log exception traceback
-        except Exception as e:
-            logger.error(f"Error saving profile image to {profile_image_path}: {e}") # Log save error
-            logger.exception(e) # Log exception traceback
-    else:
-        logger.info("No profile image URL found in Google data.") # Log if no image URL
-
-    self.google_id = idinfo.get('sub')
-    self.email_verified = idinfo.get('email_verified')
-    self.last_login_google = timezone.now()
-    self.save()
 class Session(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions')
     session_token = models.CharField(max_length=255, unique=True)
