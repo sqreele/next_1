@@ -5,6 +5,7 @@ from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Prefetch 
 from rest_framework_simplejwt.tokens import RefreshToken
 from google.oauth2 import id_token
 from google.auth.transport import requests
@@ -19,10 +20,20 @@ from .serializers import (
     PreventiveMaintenanceCompleteSerializer, PreventiveMaintenanceListSerializer,
     PropertyPMStatusSerializer
 )
+from rest_framework import viewsets, filters, status
+from .models import Machine
+from .serializers import (
+    MachineListSerializer, 
+    MachineDetailSerializer, 
+    MachineCreateSerializer,
+    MachinePreventiveMaintenanceSerializer,
+    MachineUpdateSerializer,MachineCreateUpdateSerializer,MachineSerializer 
+)
+
 from PIL import Image
 from io import BytesIO
 from django.core.files.base import ContentFile
-
+from django_filters.rest_framework import DjangoFilterBackend
 import math
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import viewsets, status, permissions
@@ -1598,3 +1609,664 @@ class PreventiveMaintenanceImageUploadView(APIView):
             return Response({'error': 'PreventiveMaintenance not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
+class MachineViewSet(viewsets.ModelViewSet):
+    """ViewSet for handling Machine CRUD operations"""
+    queryset = Machine.objects.all().select_related('property').prefetch_related(
+        Prefetch('preventive_maintenances', queryset=PreventiveMaintenance.objects.all())
+    )
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer class based on action"""
+        if self.action == 'list':
+            return MachineListSerializer
+        elif self.action in ['create', 'update', 'partial_update']:
+            return MachineCreateUpdateSerializer
+        elif self.action == 'associate_maintenances':
+            return MachinePreventiveMaintenanceSerializer
+        return MachineSerializer
+    
+    def list(self, request, *args, **kwargs):
+        """List all machines with lighter serializer"""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a single machine with detailed information"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new machine"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+    def update(self, request, *args, **kwargs):
+        """Update an existing machine"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], url_path='associate-maintenances')
+    def associate_maintenances(self, request, pk=None):
+        """Associate preventive maintenances with a machine"""
+        machine = self.get_object()
+        serializer = self.get_serializer(machine, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({
+            'status': 'success',
+            'message': 'Preventive maintenances associated successfully',
+            'data': MachineDetailSerializer(machine).data
+        }, status=status.HTTP_200_OK)
+    """ViewSet for handling Machine CRUD operations"""
+    queryset = Machine.objects.all().select_related('property').prefetch_related('preventive_maintenances')
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer class based on action"""
+        if self.action == 'list':
+            return MachineListSerializer
+        elif self.action == 'create':
+            return MachineCreateSerializer  # Use new create serializer
+        elif self.action in ['update', 'partial_update']:
+            return MachineUpdateSerializer  # Use update serializer
+        elif self.action == 'associate_maintenances':
+            return MachinePreventiveMaintenanceSerializer
+        return MachineSerializer  # Use general-purpose serializer for retrieve
+    
+    def list(self, request, *args, **kwargs):
+        """List all machines with lighter serializer"""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a single machine with detailed information"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new machine"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+    def update(self, request, *args, **kwargs):
+        """Update an existing machine"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], url_path='associate-maintenances')
+    def associate_maintenances(self, request, pk=None):
+        """Associate preventive maintenances with a machine"""
+        machine = self.get_object()
+        serializer = self.get_serializer(machine, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({
+            'status': 'success',
+            'message': 'Preventive maintenances associated successfully',
+            'data': MachineDetailSerializer(machine).data
+        }, status=status.HTTP_200_OK)
+    """ViewSet for handling Machine CRUD operations"""
+    queryset = Machine.objects.all().select_related('property').prefetch_related('preventive_maintenances')
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer class based on action"""
+        if self.action == 'list':
+            return MachineListSerializer
+        elif self.action == 'create':
+            return MachineCreateUpdateSerializer
+        elif self.action == 'update' or self.action == 'partial_update':
+            return MachineUpdateSerializer  # Use the new serializer for updates
+        elif self.action == 'associate_maintenances':
+            return MachinePreventiveMaintenanceSerializer
+        return MachineDetailSerializer
+    
+    # Rest of the ViewSet remains the same
+    def list(self, request, *args, **kwargs):
+        """List all machines with lighter serializer"""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a single machine with detailed information"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new machine"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+    def update(self, request, *args, **kwargs):
+        """Update an existing machine"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], url_path='associate-maintenances')
+    def associate_maintenances(self, request, pk=None):
+        """Associate preventive maintenances with a machine"""
+        machine = self.get_object()
+        serializer = self.get_serializer(machine, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({
+            'status': 'success',
+            'message': 'Preventive maintenances associated successfully',
+            'data': MachineDetailSerializer(machine).data
+        }, status=status.HTTP_200_OK)
+    """ViewSet for handling Machine CRUD operations"""
+    queryset = Machine.objects.all().select_related('property').prefetch_related('preventive_maintenances')
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer class based on action"""
+        if self.action == 'list':
+            return MachineListSerializer
+        elif self.action == 'create' or self.action == 'update' or self.action == 'partial_update':
+            return MachineCreateUpdateSerializer
+        elif self.action == 'associate_maintenances':
+            return MachinePreventiveMaintenanceSerializer
+        return MachineDetailSerializer
+    
+    def list(self, request, *args, **kwargs):
+        """List all machines with lighter serializer"""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a single machine with detailed information"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new machine"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+    def update(self, request, *args, **kwargs):
+        """Update an existing machine"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], url_path='associate-maintenances')
+    def associate_maintenances(self, request, pk=None):
+        """Associate preventive maintenances with a machine"""
+        machine = self.get_object()
+        serializer = self.get_serializer(machine, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({
+            'status': 'success',
+            'message': 'Preventive maintenances associated successfully',
+            'data': MachineDetailSerializer(machine).data
+        }, status=status.HTTP_200_OK)
+    """
+    API endpoint for managing machines.
+    """
+    queryset = Machine.objects.all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'property', 'location']
+    search_fields = ['name', 'description', 'machine_id']
+    ordering_fields = ['name', 'created_at', 'installation_date', 'last_maintenance_date']
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return MachineCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return MachineUpdateSerializer
+        return MachineSerializer
+    
+    def get_queryset(self):
+        """
+        This view should return a list of all machines.
+        """
+        # Start with base queryset with optimized preloading
+        queryset = Machine.objects.select_related('property')
+            
+        # Apply explicit status filter
+        status_filter = self.request.query_params.get('status', None)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+            
+        property_filter = self.request.query_params.get('property_id', None)
+        if property_filter:
+            queryset = queryset.filter(property_id=property_filter)
+        
+        # Search
+        search_term = self.request.query_params.get('search', None)
+        if search_term:
+            queryset = queryset.filter(
+                Q(name__icontains=search_term) | 
+                Q(description__icontains=search_term) | 
+                Q(machine_id__icontains=search_term)
+            )
+            
+        return queryset.distinct()
+    
+    @action(detail=True, methods=['post'])
+    def set_maintenance(self, request, pk=None):
+        """Set the last maintenance date to current time."""
+        machine = self.get_object()
+        machine.last_maintenance_date = timezone.now()
+        machine.save(update_fields=['last_maintenance_date', 'updated_at'])
+        
+        serializer = MachineSerializer(machine, context={'request': request})
+        return Response({
+            'status': 'maintenance date updated',
+            'machine': serializer.data
+        })
+    
+    @action(detail=True, methods=['post'])
+    def change_status(self, request, pk=None):
+        """Change the status of a machine."""
+        machine = self.get_object()
+        status_value = request.data.get('status')
+        
+        # Convert tuple-based choices to dict for lookup (Django 4 compatible)
+        status_choices = dict(Machine.STATUS_CHOICES)
+        
+        if status_value not in status_choices:
+            return Response(
+                {
+                    'error': f'Invalid status. Choose from {list(status_choices.keys())}',
+                    'valid_statuses': status_choices
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        machine.status = status_value
+        machine.save(update_fields=['status', 'updated_at'])
+        
+        serializer = MachineSerializer(machine, context={'request': request})
+        return Response({
+            'status': f'Machine status changed to {status_value}',
+            'machine': serializer.data
+        })
+        
+    @action(detail=True, methods=['get'])
+    def maintenance_history(self, request, pk=None):
+        """Get history of completed maintenance for this machine."""
+        machine = self.get_object()
+        
+        # Get the completed maintenances
+        maintenances = machine.preventive_maintenances.filter(
+            completed_date__isnull=False
+        ).order_by('-completed_date')
+        
+        # Just return basic info about the maintenances
+        data = [{
+            'id': pm.id,
+            'name': pm.name,
+            'completed_date': pm.completed_date
+        } for pm in maintenances]
+        
+        return Response(data)
+    """
+    API endpoint for managing machines.
+    """
+    queryset = Machine.objects.all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'property', 'location']
+    search_fields = ['name', 'description', 'machine_id']
+    ordering_fields = ['name', 'created_at', 'installation_date', 'last_maintenance_date']
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return MachineListSerializer
+        elif self.action == 'retrieve':
+            return MachineDetailSerializer
+        elif self.action in ['create', 'update', 'partial_update']:
+            return MachineCreateUpdateSerializer
+        elif self.action == 'set_preventive_maintenances':
+            return MachinePreventiveMaintenanceSerializer
+        return MachineDetailSerializer
+    
+    def get_queryset(self):
+        """
+        This view should return a list of all machines 
+        for the currently authenticated user.
+        """
+        # Start with base queryset with optimized preloading
+        if self.action == 'list':
+            queryset = Machine.objects.select_related('property')
+        elif self.action == 'retrieve':
+            # For detail view, prefetch related preventive maintenances
+            queryset = Machine.objects.select_related('property').prefetch_related(
+                Prefetch(
+                    'preventive_maintenances',
+                    queryset=PreventiveMaintenance.objects.order_by('next_due_date')
+                )
+            )
+        else:
+            queryset = Machine.objects.all()
+            
+        # Apply explicit status filter
+        status_filter = self.request.query_params.get('status', None)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+            
+        property_filter = self.request.query_params.get('property_id', None)
+        if property_filter:
+            queryset = queryset.filter(property_id=property_filter)
+        
+        # Search (implemented here for clarity though it's handled by SearchFilter too)
+        search_term = self.request.query_params.get('search', None)
+        if search_term:
+            queryset = queryset.filter(
+                Q(name__icontains=search_term) | 
+                Q(description__icontains=search_term) | 
+                Q(machine_id__icontains=search_term)
+            )
+            
+        return queryset.distinct()
+    
+    @action(detail=True, methods=['post'])
+    def set_maintenance(self, request, pk=None):
+        """Set the last maintenance date to current time."""
+        machine = self.get_object()
+        machine.last_maintenance_date = timezone.now()
+        machine.save(update_fields=['last_maintenance_date', 'updated_at'])
+        
+        # Return updated serialized data
+        serializer = MachineDetailSerializer(machine, context={'request': request})
+        return Response({
+            'status': 'maintenance date updated',
+            'machine': serializer.data
+        })
+    
+    @action(detail=True, methods=['post'])
+    def change_status(self, request, pk=None):
+        """Change the status of a machine."""
+        machine = self.get_object()
+        status_value = request.data.get('status')
+        
+        # Convert tuple-based choices to dict for lookup (Django 4 compatible)
+        status_choices = dict(Machine.STATUS_CHOICES)
+        
+        if status_value not in status_choices:
+            return Response(
+                {
+                    'error': f'Invalid status. Choose from {list(status_choices.keys())}',
+                    'valid_statuses': status_choices
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        machine.status = status_value
+        machine.save(update_fields=['status', 'updated_at'])
+        
+        # Return updated serialized data
+        serializer = MachineDetailSerializer(machine, context={'request': request})
+        return Response({
+            'status': f'Machine status changed to {status_value}',
+            'machine': serializer.data
+        })
+        
+    @action(detail=True, methods=['post'])
+    def set_preventive_maintenances(self, request, pk=None):
+        """Associate preventive maintenance schedules with the machine."""
+        machine = self.get_object()
+        serializer = self.get_serializer(machine, data=request.data)
+        
+        if serializer.is_valid():
+            serializer.save()
+            
+            # Return updated machine with new preventive maintenances
+            response_serializer = MachineDetailSerializer(machine, context={'request': request})
+            return Response({
+                'status': 'preventive maintenances updated',
+                'machine': response_serializer.data
+            })
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    @action(detail=True, methods=['get'])
+    def maintenance_history(self, request, pk=None):
+        """Get history of completed maintenance for this machine."""
+        machine = self.get_object()
+        
+        # Use prefetch_related for optimal query performance
+        maintenances = machine.preventive_maintenances.filter(
+            completed_date__isnull=False
+        ).order_by('-completed_date')
+        
+        from .serializers import PreventiveMaintenanceListSerializer
+        serializer = PreventiveMaintenanceListSerializer(maintenances, many=True)
+        return Response(serializer.data)
+    """
+    API endpoint for managing machines.
+    """
+    queryset = Machine.objects.all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'property', 'location']
+    search_fields = ['name', 'description', 'machine_id']
+    ordering_fields = ['name', 'created_at', 'installation_date', 'last_maintenance_date']
+    
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return MachineListSerializer
+        elif self.action == 'retrieve':
+            return MachineDetailSerializer
+        elif self.action in ['create', 'update', 'partial_update']:
+            return MachineCreateUpdateSerializer
+        elif self.action == 'set_preventive_maintenances':
+            return MachinePreventiveMaintenanceSerializer
+        return MachineDetailSerializer
+    
+    def get_queryset(self):
+        """
+        This view should return a list of all machines 
+        for the currently authenticated user.
+        """
+        user = self.request.user
+        
+        # Start with base queryset with optimized preloading
+        if self.action == 'list':
+            queryset = Machine.objects.select_related('property')
+        elif self.action == 'retrieve':
+            # For detail view, prefetch related preventive maintenances
+            queryset = Machine.objects.select_related('property').prefetch_related(
+                Prefetch(
+                    'preventive_maintenances',
+                    queryset=PreventiveMaintenance.objects.order_by('next_due_date')
+                )
+            )
+        else:
+            queryset = Machine.objects.all()
+        
+        # Apply permission filters
+        if not (user.is_staff or user.has_perm('machines.view_all_machines')):
+            queryset = queryset.filter(property__managers=user)
+            
+        # Apply explicit status filter (works with Django 4's FilterBackend as well)
+        status_filter = self.request.query_params.get('status', None)
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+            
+        property_filter = self.request.query_params.get('property_id', None)
+        if property_filter:
+            queryset = queryset.filter(property_id=property_filter)
+        
+        # Search (implemented here for clarity though it's handled by SearchFilter too)
+        search_term = self.request.query_params.get('search', None)
+        if search_term:
+            queryset = queryset.filter(
+                Q(name__icontains=search_term) | 
+                Q(description__icontains=search_term) | 
+                Q(machine_id__icontains=search_term)
+            )
+            
+        return queryset.distinct()
+    
+    @action(detail=True, methods=['post'])
+    def set_maintenance(self, request, pk=None):
+        """Set the last maintenance date to current time."""
+        machine = self.get_object()
+        machine.last_maintenance_date = timezone.now()
+        machine.save(update_fields=['last_maintenance_date', 'updated_at'])
+        
+        # Return updated serialized data
+        serializer = MachineDetailSerializer(machine, context={'request': request})
+        return Response({
+            'status': 'maintenance date updated',
+            'machine': serializer.data
+        })
+    
+    @action(detail=True, methods=['post'])
+    def change_status(self, request, pk=None):
+        """Change the status of a machine."""
+        machine = self.get_object()
+        status_value = request.data.get('status')
+        
+        # Convert tuple-based choices to dict for lookup (Django 4 compatible)
+        status_choices = dict(Machine.STATUS_CHOICES)
+        
+        if status_value not in status_choices:
+            return Response(
+                {
+                    'error': f'Invalid status. Choose from {list(status_choices.keys())}',
+                    'valid_statuses': status_choices
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        machine.status = status_value
+        machine.save(update_fields=['status', 'updated_at'])
+        
+        # Return updated serialized data
+        serializer = MachineDetailSerializer(machine, context={'request': request})
+        return Response({
+            'status': f'Machine status changed to {status_value}',
+            'machine': serializer.data
+        })
+        
+    @action(detail=True, methods=['post'])
+    def set_preventive_maintenances(self, request, pk=None):
+        """Associate preventive maintenance schedules with the machine."""
+        machine = self.get_object()
+        serializer = self.get_serializer(machine, data=request.data)
+        
+        if serializer.is_valid():
+            serializer.save()
+            
+            # Return updated machine with new preventive maintenances
+            response_serializer = MachineDetailSerializer(machine, context={'request': request})
+            return Response({
+                'status': 'preventive maintenances updated',
+                'machine': response_serializer.data
+            })
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+    @action(detail=True, methods=['get'])
+    def maintenance_history(self, request, pk=None):
+        """Get history of completed maintenance for this machine."""
+        machine = self.get_object()
+        
+        # Use prefetch_related for optimal query performance
+        maintenances = machine.preventive_maintenances.filter(
+            completed_date__isnull=False
+        ).order_by('-completed_date')
+        
+        from .serializers import PreventiveMaintenanceListSerializer
+        serializer = PreventiveMaintenanceListSerializer(maintenances, many=True)
+        return Response(serializer.data)
+    queryset = Machine.objects.all()
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['status', 'property', 'location']
+    search_fields = ['name', 'description', 'machine_id']
+    ordering_fields = ['name', 'created_at', 'installation_date', 'last_maintenance_date']
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return MachineCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return MachineUpdateSerializer
+        return MachineSerializer
+    
+    def get_queryset(self):
+        user = self.request.user
+        # If user has admin permissions, return all machines
+        if user.is_staff or user.has_perm('machines.view_all_machines'):
+            return Machine.objects.all()
+        # Otherwise, only return machines from properties user has access to
+        return Machine.objects.filter(property__managers=user)
+    
+    @action(detail=True, methods=['post'])
+    def set_maintenance(self, request, pk=None):
+        machine = self.get_object()
+        machine.last_maintenance_date = timezone.now()
+        machine.save()
+        return Response({'status': 'maintenance date updated'})
+    
+    @action(detail=True, methods=['post'])
+    def change_status(self, request, pk=None):
+        machine = self.get_object()
+        status_value = request.data.get('status')
+        
+        if status_value not in dict(Machine.STATUS_CHOICES):
+            return Response(
+                {'error': f'Invalid status. Choose from {dict(Machine.STATUS_CHOICES).keys()}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        machine.status = status_value
+        machine.save()
+        return Response({'status': f'Machine status changed to {status_value}'})

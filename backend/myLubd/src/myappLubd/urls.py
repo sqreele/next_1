@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from . import views
 from .views import (
     RoomViewSet, TopicViewSet, JobViewSet, PropertyViewSet,
-    UserProfileViewSet, UserViewSet
+    UserProfileViewSet, UserViewSet,MachineViewSet
 )
 from .views import PreventiveMaintenanceImageUploadView
 from rest_framework_simplejwt.views import (
@@ -31,7 +31,7 @@ router.register(r'preventive-maintenance',
     views.PreventiveMaintenanceViewSet, 
     basename='preventive-maintenance'
 )
-
+router.register(r'machines', views.MachineViewSet, basename='machine')
 # Define the URL patterns
 urlpatterns = [
     # Include API routes under the 'api/' path
@@ -45,7 +45,7 @@ urlpatterns = [
     path('api/v1/auth/check/', views.auth_check, name='auth_check'),
     path('api/auth/login/', views.login_view, name='login'),
     path('api/v1/auth/register/', views.RegisterView.as_view(), name='register'),
-    
+   
     # Health check
     path('health/', health_check, name='health_check'),
     path('api/preventive-maintenance/<str:pm_id>/upload-images/', PreventiveMaintenanceImageUploadView.as_view(), name='upload_pm_images'),
