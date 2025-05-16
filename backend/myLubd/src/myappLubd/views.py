@@ -23,11 +23,10 @@ from .serializers import (
 from rest_framework import viewsets, filters, status
 from .models import Machine
 from .serializers import (
-    MachineListSerializer, 
-    MachineDetailSerializer, 
+ 
     MachineCreateSerializer,
-    MachinePreventiveMaintenanceSerializer,
-    MachineUpdateSerializer,MachineCreateUpdateSerializer,MachineSerializer 
+   
+    MachineUpdateSerializer,MachineSerializer 
 )
 
 from PIL import Image
