@@ -480,6 +480,72 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
 
 # ----- Machine Serializers -----
 
+class MachineListSerializer(serializers.ModelSerializer):
+    """Lighter serializer for listing machines"""
+    property_name = serializers.CharField(source='property.name', read_only=True)
+    maintenance_count = serializers.SerializerMethodField()
+    next_maintenance_date = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Machine
+        fields = [
+            'id', 'machine_id', 'name', 'status', 'property_name', 
+            'maintenance_count', 'next_maintenance_date', 'last_maintenance_date'
+        ]
+    
+    def get_maintenance_count(self, obj):
+        """Get count of preventive maintenances associated with this machine"""
+        return obj.preventive_maintenances.count()
+    
+    def get_next_maintenance_date(self, obj):
+        """Get the next scheduled maintenance date"""
+        return obj.get_next_maintenance_date()
+
+class MachineDetailSerializer(serializers.ModelSerializer):
+    """Detailed serializer for machine details view"""
+    property = PropertySerializer(read_only=True)
+    property_id = serializers.PrimaryKeyRelatedField(
+        queryset=Property.objects.all(),
+        source='property',
+        write_only=True
+    )
+    preventive_maintenances = PreventiveMaintenanceListSerializer(many=True, read_only=True)
+    days_since_last_maintenance = serializers.SerializerMethodField()
+    next_maintenance_date = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Machine
+        fields = [
+            'id', 'machine_id', 'name', 'description', 'location', 'property', 'property_id',
+            'status', 'installation_date', 'last_maintenance_date', 'preventive_maintenances',
+            'days_since_last_maintenance', 'next_maintenance_date', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'machine_id', 'created_at', 'updated_at']
+    
+    def get_days_since_last_maintenance(self, obj):
+        """Calculate days since last maintenance"""
+        if obj.last_maintenance_date:
+            delta = timezone.now() - obj.last_maintenance_date
+            return delta.days
+        return None
+    
+    def get_next_maintenance_date(self, obj):
+        """Get the next scheduled maintenance date"""
+        return obj.get_next_maintenance_date()
+    
+    def validate(self, data):
+        """Custom validation for machine data"""
+        installation_date = data.get('installation_date')
+        last_maintenance_date = data.get('last_maintenance_date')
+        
+        if installation_date and last_maintenance_date:
+            if last_maintenance_date.date() < installation_date:
+                raise serializers.ValidationError({
+                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
+                })
+        
+        return data
+
 class MachineCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating machines"""
     class Meta:
@@ -512,7 +578,7 @@ class MachineUpdateSerializer(serializers.ModelSerializer):
         ]
     
     def validate(self, data):
-        """Custom validation for machine data"""
+        """Custom validation for machine updates"""
         installation_date = data.get('installation_date')
         last_maintenance_date = data.get('last_maintenance_date')
         
@@ -546,3 +612,43 @@ class MachineSerializer(serializers.ModelSerializer):
                 })
         
         return data
+
+class MachinePreventiveMaintenanceSerializer(serializers.ModelSerializer):
+    """Serializer for associating preventive maintenance with machines"""
+    preventive_maintenance_ids = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True
+    )
+    
+    class Meta:
+        model = Machine
+        fields = ['preventive_maintenance_ids']
+    
+    def update(self, instance, validated_data):
+        pm_ids = validated_data.pop('preventive_maintenance_ids', [])
+        
+        if pm_ids:
+            pm_instances = PreventiveMaintenance.objects.filter(pm_id__in=pm_ids)
+            
+            # Get current and new pm counts for validation
+            current_count = instance.preventive_maintenances.count()
+            new_count = pm_instances.count()
+            
+            if new_count < len(pm_ids):
+                missing_ids = set(pm_ids) - set(pm_instances.values_list('pm_id', flat=True))
+                raise serializers.ValidationError({
+                    'preventive_maintenance_ids': f'Invalid maintenance IDs: {", ".join(missing_ids)}'
+                })
+            
+            # Update the many-to-many relationship
+            instance.preventive_maintenances.set(pm_instances)
+            
+            # Update last_maintenance_date if there are completed maintenances
+            latest_completed = pm_instances.filter(
+                completed_date__isnull=False
+            ).order_by('-completed_date').first()
+            
+            if latest_completed:
+                instance.last_maintenance_date = latest_completed.completed_date
+                instance.save(update_fields=['last_maintenance_date', 'updated_at'])
+        return instance
