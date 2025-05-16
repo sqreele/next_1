@@ -25,11 +25,12 @@ from .models import Machine
 from .serializers import (
     MachineListSerializer,
     MachineDetailSerializer,
-    MachineCreateUpdateSerializer,
-    MachinePreventiveMaintenanceSerializer,
-    MachineSerializer,MachineCreateSerializer,  # Added
+    MachineCreateSerializer,
     MachineUpdateSerializer,
+    MachinePreventiveMaintenanceSerializer,
+    MachineSerializer
 )
+
 
 
 from PIL import Image
@@ -1613,6 +1614,69 @@ class PreventiveMaintenanceImageUploadView(APIView):
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 class MachineViewSet(viewsets.ModelViewSet):
+    """ViewSet for handling Machine CRUD operations"""
+    queryset = Machine.objects.all().select_related('property').prefetch_related(
+        Prefetch('preventive_maintenances', queryset=PreventiveMaintenance.objects.all())
+    )
+    
+    def get_serializer_class(self):
+        """Return appropriate serializer class based on action"""
+        if self.action == 'list':
+            return MachineListSerializer
+        elif self.action == 'create':
+            return MachineCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            return MachineUpdateSerializer
+        elif self.action == 'associate_maintenances':
+            return MachinePreventiveMaintenanceSerializer
+        return MachineSerializer
+    
+    def list(self, request, *args, **kwargs):
+        """List all machines with lighter serializer"""
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a single machine with detailed information"""
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+    
+    def create(self, request, *args, **kwargs):
+        """Create a new machine"""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+    def update(self, request, *args, **kwargs):
+        """Update an existing machine"""
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], url_path='associate-maintenances')
+    def associate_maintenances(self, request, pk=None):
+        """Associate preventive maintenances with a machine"""
+        machine = self.get_object()
+        serializer = self.get_serializer(machine, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({
+            'status': 'success',
+            'message': 'Preventive maintenances associated successfully',
+            'data': MachineDetailSerializer(machine).data
+        }, status=status.HTTP_200_OK)
     """ViewSet for handling Machine CRUD operations"""
     queryset = Machine.objects.all().select_related('property').prefetch_related(
         Prefetch('preventive_maintenances', queryset=PreventiveMaintenance.objects.all())
