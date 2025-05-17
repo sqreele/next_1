@@ -67,7 +67,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'debug_toolbar',
     'rest_framework_simplejwt',
-    'dbbackup'
+    'dbbackup',
+    'django_filters'
     
 ]
 
