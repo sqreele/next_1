@@ -440,7 +440,7 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
     class Meta:
         model = PreventiveMaintenance
         fields = [
-            'pm_id', 'pmtitle', 'topics', 'topic_ids', 'scheduled_date', 'completed_date',
+            'pm_id', 'pmtitle', 'topics', 'topic_ids', 'scheduled_date', 'completed_date','property_id','machine_id', 'machines',
             'frequency', 'custom_days', 'next_due_date',
             'before_image', 'after_image', 'before_image_url', 'after_image_url', 'notes'
         ]
@@ -477,6 +477,8 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
             instance.topics.set(topic_ids)
         
         return instance
+    def get_machines(self, obj):
+        return obj.machines if obj.machines else []
 
 # ----- Machine Serializers -----
 
