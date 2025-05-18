@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.core.validators import FileExtensionValidator
 import math
 
+# User serializer for basic user data
 class UserSerializer(serializers.HyperlinkedModelSerializer):
     class Meta:
         model = User
@@ -19,6 +20,7 @@ class RoomSerializer(serializers.ModelSerializer):
         model = Room
         fields = '__all__'
 
+# Property serializer for PM status endpoint
 class PropertyPMStatusSerializer(serializers.ModelSerializer):
     """Serializer for property preventive maintenance status endpoint"""
     is_preventivemaintenance = serializers.BooleanField(read_only=True)
@@ -27,6 +29,7 @@ class PropertyPMStatusSerializer(serializers.ModelSerializer):
         model = Property
         fields = ['property_id', 'name', 'is_preventivemaintenance']
 
+# Property serializer with rooms and PM status
 class PropertySerializer(serializers.ModelSerializer):
     rooms = serializers.SerializerMethodField()
     is_preventivemaintenance = serializers.SerializerMethodField()
@@ -55,19 +58,18 @@ class PropertySerializer(serializers.ModelSerializer):
         Check if this property has any preventive maintenance jobs
         Only calculated if explicitly requested to avoid extra queries
         """
-        # Check if we need to calculate PM status
         calculate_pm = self.context.get('calculate_pm', False)
         if not calculate_pm:
             return None
             
-        # Get the PM status as efficiently as possible
         has_pm_jobs = Job.objects.filter(
-            rooms__properties=obj,  # Consistent field name
+            rooms__properties=obj,
             is_preventivemaintenance=True
         ).exists()
         
         return has_pm_jobs
 
+# User profile serializer
 class UserProfileSerializer(serializers.ModelSerializer):
     properties = PropertySerializer(many=True, read_only=True)
     username = serializers.CharField(source='user.username', read_only=True)
@@ -87,6 +89,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'username', 'email', 'created_at']
 
+# Job image serializer
 class JobImageSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
 
@@ -100,11 +103,13 @@ class JobImageSerializer(serializers.ModelSerializer):
             return self.context['request'].build_absolute_uri(obj.image.url)
         return None
 
+# Topic serializer
 class TopicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Topic
         fields = ['title', 'description', 'id']
 
+# Job serializer
 class JobSerializer(serializers.ModelSerializer):
     updated_by = serializers.SlugRelatedField(
         slug_field='username',
@@ -190,6 +195,7 @@ class JobSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         return data
 
+# User registration serializer
 class UserRegistrationSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
     email = serializers.EmailField(required=True)
@@ -201,6 +207,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         return User.objects.create_user(**validated_data)
 
+# User serializer for creation
 class UserSerializer(serializers.ModelSerializer):
     password = serializers.CharField(
         write_only=True,
@@ -230,10 +237,10 @@ class UserSerializer(serializers.ModelSerializer):
             email=validated_data['email'],
             password=validated_data['password']
         )
-        # Use get_or_create to avoid duplicate UserProfile
         UserProfile.objects.get_or_create(user=user)
         return user
 
+# Login serializer
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField(required=True)
     password = serializers.CharField(required=True, write_only=True)
@@ -247,6 +254,7 @@ class LoginSerializer(serializers.Serializer):
 
         return attrs
 
+# Session serializer
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Session
@@ -259,28 +267,207 @@ class SessionSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['created_at']
 
-# ----- Preventive Maintenance Serializers -----
+# ----- Machine Serializers -----
 
-class PreventiveMaintenanceListSerializer(serializers.ModelSerializer):
-    """Lighter serializer for listing preventive maintenance records"""
-    job_id = serializers.CharField(source='job.job_id')
-    job_description = serializers.CharField(source='job.description', read_only=True)
-    status = serializers.SerializerMethodField()
+class MachineSerializer(serializers.ModelSerializer):
+    """General-purpose serializer for Machine model"""
+    property_name = serializers.CharField(source='property.name', read_only=True)
+
+    class Meta:
+        model = Machine
+        fields = [
+            'id', 'machine_id', 'name', 'description', 'location', 'property', 'property_name',
+            'status', 'installation_date', 'last_maintenance_date', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'machine_id', 'created_at', 'updated_at']
     
+    def validate(self, data):
+        """Custom validation for machine data"""
+        installation_date = data.get('installation_date')
+        last_maintenance_date = data.get('last_maintenance_date')
+        
+        if installation_date and last_maintenance_date:
+            if last_maintenance_date.date() < installation_date:
+                raise serializers.ValidationError({
+                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
+                })
+        
+        return data
+
+class MachineListSerializer(serializers.ModelSerializer):
+    """Lighter serializer for listing machines"""
+    property_name = serializers.CharField(source='property.name', read_only=True)
+    maintenance_count = serializers.SerializerMethodField()
+    next_maintenance_date = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Machine
+        fields = [
+            'id', 'machine_id', 'name', 'status', 'property_name', 
+            'maintenance_count', 'next_maintenance_date', 'last_maintenance_date'
+        ]
+    
+    def get_maintenance_count(self, obj):
+        """Get count of preventive maintenances associated with this machine"""
+        return obj.preventive_maintenances.count()
+    
+    def get_next_maintenance_date(self, obj):
+        """Get the next scheduled maintenance date"""
+        return obj.get_next_maintenance_date()
+class PreventiveMaintenanceListSerializer(serializers.ModelSerializer):
+    job_id = serializers.SerializerMethodField()
+    job_description = serializers.SerializerMethodField()
+    topics = TopicSerializer(many=True)
+    machines = serializers.SerializerMethodField()
+    property_id = serializers.SerializerMethodField()
+
     class Meta:
         model = PreventiveMaintenance
         fields = [
-            'pm_id', 'job_id', 'job_description', 'scheduled_date', 
-            'completed_date', 'frequency', 'next_due_date', 'status'
+            'pm_id', 'job_id', 'job_description', 'scheduled_date', 'completed_date',
+            'frequency', 'next_due_date', 'status', 'topics', 'machines', 'property_id'
+        ]
+        list_serializer_class = serializers.ListSerializer
+
+    def get_job_id(self, obj):
+        return obj.job.job_id if obj.job else None
+
+    def get_job_description(self, obj):
+        return obj.job.description if obj.job else None
+
+    def get_machines(self, obj):
+        return MachineSerializer(obj.machines.all(), many=True).data if obj.machines.exists() else []
+
+    def get_property_id(self, obj):
+        if not obj.job or not obj.job.rooms.exists():
+            return []
+        properties = Property.objects.filter(rooms__job=obj.job).distinct()
+        return [prop.property_id for prop in properties]
+class MachineDetailSerializer(serializers.ModelSerializer):
+    """Detailed serializer for machine details view"""
+    property = PropertySerializer(read_only=True)
+    property_id = serializers.PrimaryKeyRelatedField(
+        queryset=Property.objects.all(),
+        source='property',
+        write_only=True
+    )
+    preventive_maintenances = PreventiveMaintenanceListSerializer(many=True, read_only=True)
+    days_since_last_maintenance = serializers.SerializerMethodField()
+    next_maintenance_date = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Machine
+        fields = [
+            'id', 'machine_id', 'name', 'description', 'location', 'property', 'property_id',
+            'status', 'installation_date', 'last_maintenance_date', 'preventive_maintenances',
+            'days_since_last_maintenance', 'next_maintenance_date', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'machine_id', 'created_at', 'updated_at']
+    
+    def get_days_since_last_maintenance(self, obj):
+        """Calculate days since last maintenance"""
+        if obj.last_maintenance_date:
+            delta = timezone.now() - obj.last_maintenance_date
+            return delta.days
+        return None
+    
+    def get_next_maintenance_date(self, obj):
+        """Get the next scheduled maintenance date"""
+        return obj.get_next_maintenance_date()
+    
+    def validate(self, data):
+        """Custom validation for machine data"""
+        installation_date = data.get('installation_date')
+        last_maintenance_date = data.get('last_maintenance_date')
+        
+        if installation_date and last_maintenance_date:
+            if last_maintenance_date.date() < installation_date:
+                raise serializers.ValidationError({
+                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
+                })
+        
+        return data
+
+class MachineCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating machines"""
+    class Meta:
+        model = Machine
+        fields = [
+            'name', 'description', 'location', 'property', 
+            'status', 'installation_date', 'last_maintenance_date'
         ]
     
-    def get_status(self, obj):
-        if obj.completed_date:
-            return "completed"
-        elif obj.scheduled_date < timezone.now():
-            return "overdue"
-        else:
-            return "scheduled"
+    def validate(self, data):
+        """Custom validation for machine creation"""
+        installation_date = data.get('installation_date')
+        last_maintenance_date = data.get('last_maintenance_date')
+        
+        if installation_date and last_maintenance_date:
+            if last_maintenance_date.date() < installation_date:
+                raise serializers.ValidationError({
+                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
+                })
+        
+        return data
+
+class MachineUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for updating machines"""
+    class Meta:
+        model = Machine
+        fields = [
+            'name', 'description', 'location', 'property', 
+            'status', 'installation_date', 'last_maintenance_date'
+        ]
+    
+    def validate(self, data):
+        """Custom validation for machine updates"""
+        installation_date = data.get('installation_date')
+        last_maintenance_date = data.get('last_maintenance_date')
+        
+        if installation_date and last_maintenance_date:
+            if last_maintenance_date.date() < installation_date:
+                raise serializers.ValidationError({
+                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
+                })
+        
+        return data
+
+class MachinePreventiveMaintenanceSerializer(serializers.ModelSerializer):
+    """Serializer for associating preventive maintenance with machines"""
+    preventive_maintenance_ids = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True
+    )
+    
+    class Meta:
+        model = Machine
+        fields = ['preventive_maintenance_ids']
+    
+    def update(self, instance, validated_data):
+        pm_ids = validated_data.pop('preventive_maintenance_ids', [])
+        
+        if pm_ids:
+            pm_instances = PreventiveMaintenance.objects.filter(pm_id__in=pm_ids)
+            
+            if pm_instances.count() < len(pm_ids):
+                missing_ids = set(pm_ids) - set(pm_instances.values_list('pm_id', flat=True))
+                raise serializers.ValidationError({
+                    'preventive_maintenance_ids': f'Invalid maintenance IDs: {", ".join(missing_ids)}'
+                })
+            
+            instance.preventive_maintenances.set(pm_instances)
+            
+            latest_completed = pm_instances.filter(
+                completed_date__isnull=False
+            ).order_by('-completed_date').first()
+            
+            if latest_completed:
+                instance.last_maintenance_date = latest_completed.completed_date
+                instance.save(update_fields=['last_maintenance_date', 'updated_at'])
+        return instance
+
+# ----- Preventive Maintenance Serializers -----
+
 
 class PreventiveMaintenanceDetailSerializer(serializers.ModelSerializer):
     """Detailed serializer for single item view, creation and updates"""
@@ -290,8 +477,22 @@ class PreventiveMaintenanceDetailSerializer(serializers.ModelSerializer):
     is_overdue = serializers.SerializerMethodField()
     created_by = UserSerializer(read_only=True)
     days_remaining = serializers.SerializerMethodField()
+    topics = TopicSerializer(many=True, read_only=True)
+    topic_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        allow_empty=True
+    )
+    machines = MachineSerializer(many=True, read_only=True)
+    machine_ids = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True,
+        required=False,
+        allow_empty=True
+    )
+    property_id = serializers.SerializerMethodField()
     
-    # Explicitly define image fields
     before_image = serializers.ImageField(
         required=False,
         allow_null=True,
@@ -306,10 +507,10 @@ class PreventiveMaintenanceDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = PreventiveMaintenance
         fields = [
-            'pm_id', 'job', 'topics', 'scheduled_date', 'completed_date',
-            'frequency', 'custom_days', 'next_due_date',
-            'before_image', 'after_image', 'before_image_url', 'after_image_url',
-            'notes', 'created_by', 'updated_at', 'is_overdue', 'days_remaining', 'pmtitle'
+            'pm_id', 'job', 'pmtitle', 'topics', 'topic_ids', 'scheduled_date', 'completed_date',
+            'frequency', 'custom_days', 'next_due_date', 'before_image', 'after_image',
+            'before_image_url', 'after_image_url', 'notes', 'created_by', 'updated_at',
+            'is_overdue', 'days_remaining', 'machine_ids', 'machines', 'property_id'
         ]
         read_only_fields = ['pm_id', 'created_by', 'updated_at', 'next_due_date']
         extra_kwargs = {
@@ -362,6 +563,30 @@ class PreventiveMaintenanceDetailSerializer(serializers.ModelSerializer):
             delta = obj.scheduled_date - now
             return math.ceil(delta.total_seconds() / 86400)
     
+    def get_property_id(self, obj):
+        machines = obj.machines.all()
+        return [machine.property.property_id for machine in machines] if machines else []
+
+    def create(self, validated_data):
+        topic_ids = validated_data.pop('topic_ids', [])
+        machine_ids = validated_data.pop('machine_ids', [])
+        instance = super().create(validated_data)
+        if topic_ids:
+            instance.topics.set(topic_ids)
+        if machine_ids:
+            instance.machines.set(Machine.objects.filter(machine_id__in=machine_ids))
+        return instance
+
+    def update(self, instance, validated_data):
+        topic_ids = validated_data.pop('topic_ids', None)
+        machine_ids = validated_data.pop('machine_ids', None)
+        instance = super().update(instance, validated_data)
+        if topic_ids is not None:
+            instance.topics.set(topic_ids)
+        if machine_ids is not None:
+            instance.machines.set(Machine.objects.filter(machine_id__in=machine_ids))
+        return instance
+
     def validate(self, data):
         """Custom validation for form data"""
         frequency = data.get('frequency')
@@ -380,15 +605,89 @@ class PreventiveMaintenanceDetailSerializer(serializers.ModelSerializer):
                 'completed_date': 'Completion date cannot be earlier than scheduled date'
             })
         
+        machine_ids = data.get('machine_ids', [])
+        if machine_ids:
+            machines = Machine.objects.filter(machine_id__in=machine_ids)
+            if len(machines) != len(machine_ids):
+                raise serializers.ValidationError("One or more machine_ids are invalid.")
+            property_ids = set(machine.property.property_id for machine in machines)
+            if len(property_ids) > 1:
+                raise serializers.ValidationError("All machines must belong to the same property.")
+        
         return data
 
 class PreventiveMaintenanceCreateUpdateSerializer(serializers.ModelSerializer):
+    topics = TopicSerializer(many=True, read_only=True)
+    topic_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+        allow_empty=True
+    )
+    machines = MachineSerializer(many=True, read_only=True)
+    machine_ids = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True,
+        required=False,
+        allow_empty=True
+    )
+    before_image_url = serializers.SerializerMethodField()
+    after_image_url = serializers.SerializerMethodField()
+    property_id = serializers.SerializerMethodField()
+
     class Meta:
         model = PreventiveMaintenance
         fields = [
-            'pmtitle', 'topics', 'scheduled_date', 'completed_date',
-            'frequency', 'custom_days', 'before_image', 'after_image', 'notes'
+            'pm_id', 'pmtitle', 'topics', 'topic_ids', 'scheduled_date', 'completed_date',
+            'frequency', 'custom_days', 'next_due_date', 'before_image', 'after_image',
+            'before_image_url', 'after_image_url', 'notes', 'machine_ids', 'machines', 'property_id'
         ]
+        read_only_fields = ['pm_id', 'next_due_date']
+        extra_kwargs = {
+            'before_image': {'required': False},
+            'after_image': {'required': False},
+            'notes': {'required': False},
+            'pmtitle': {'required': False},
+            'custom_days': {'required': False},
+            'completed_date': {'required': False},
+            'next_due_date': {'required': False},
+        }
+
+    def get_before_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.before_image and request:
+            return request.build_absolute_uri(obj.before_image.url)
+        return None
+
+    def get_after_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.after_image and request:
+            return request.build_absolute_uri(obj.after_image.url)
+        return None
+
+    def get_property_id(self, obj):
+        machines = obj.machines.all()
+        return [machine.property.property_id for machine in machines] if machines else []
+
+    def create(self, validated_data):
+        topic_ids = validated_data.pop('topic_ids', [])
+        machine_ids = validated_data.pop('machine_ids', [])
+        instance = super().create(validated_data)
+        if topic_ids:
+            instance.topics.set(topic_ids)
+        if machine_ids:
+            instance.machines.set(Machine.objects.filter(machine_id__in=machine_ids))
+        return instance
+
+    def update(self, instance, validated_data):
+        topic_ids = validated_data.pop('topic_ids', None)
+        machine_ids = validated_data.pop('machine_ids', None)
+        instance = super().update(instance, validated_data)
+        if topic_ids is not None:
+            instance.topics.set(topic_ids)
+        if machine_ids is not None:
+            instance.machines.set(Machine.objects.filter(machine_id__in=machine_ids))
+        return instance
 
     def validate(self, data):
         frequency = data.get('frequency')
@@ -407,12 +706,43 @@ class PreventiveMaintenanceCreateUpdateSerializer(serializers.ModelSerializer):
                 'completed_date': 'Completion date cannot be earlier than scheduled date'
             })
 
-        return data    
-        
+        machine_ids = data.get('machine_ids', [])
+        if machine_ids:
+            machines = Machine.objects.filter(machine_id__in=machine_ids)
+            if len(machines) != len(machine_ids):
+                raise serializers.ValidationError("One or more machine_ids are invalid.")
+            property_ids = set(machine.property.property_id for machine in machines)
+            if len(property_ids) > 1:
+                raise serializers.ValidationError("All machines must belong to the same property.")
+
+        return data
+
 class PreventiveMaintenanceCompleteSerializer(serializers.ModelSerializer):
+    machines = MachineSerializer(many=True, read_only=True)
+    machine_ids = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True,
+        required=False,
+        allow_empty=True
+    )
+    property_id = serializers.SerializerMethodField()
+
     class Meta:
         model = PreventiveMaintenance
-        fields = ['completed_date', 'after_image', 'notes']
+        fields = [
+            'completed_date', 'after_image', 'notes', 'machine_ids', 'machines', 'property_id'
+        ]
+
+    def get_property_id(self, obj):
+        machines = obj.machines.all()
+        return [machine.property.property_id for machine in machines] if machines else []
+
+    def update(self, instance, validated_data):
+        machine_ids = validated_data.pop('machine_ids', None)
+        instance = super().update(instance, validated_data)
+        if machine_ids is not None:
+            instance.machines.set(Machine.objects.filter(machine_id__in=machine_ids))
+        return instance
 
     def validate(self, data):
         scheduled_date = self.instance.scheduled_date if self.instance else None
@@ -422,12 +752,17 @@ class PreventiveMaintenanceCompleteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'completed_date': 'Completion date cannot be earlier than scheduled date'
             })
+
+        machine_ids = data.get('machine_ids', [])
+        if machine_ids:
+            machines = Machine.objects.filter(machine_id__in=machine_ids)
+            if len(machines) != len(machine_ids):
+                raise serializers.ValidationError("One or more machine_ids are invalid.")
+            property_ids = set(machine.property.property_id for machine in machines)
+            if len(property_ids) > 1:
+                raise serializers.ValidationError("All machines must belong to the same property.")
+
         return data
-    
-    
-from rest_framework import serializers
-from .models import PreventiveMaintenance, Topic, Machine
-from .serializers import TopicSerializer  # Ensure TopicSerializer is imported
 
 class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
     topics = TopicSerializer(many=True, read_only=True)
@@ -437,6 +772,7 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
         required=False,
         allow_empty=True
     )
+    machines = MachineSerializer(many=True, read_only=True)
     machine_ids = serializers.ListField(
         child=serializers.CharField(),
         write_only=True,
@@ -510,348 +846,3 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
             if len(property_ids) > 1:
                 raise serializers.ValidationError("All machines must belong to the same property.")
         return data
-# ----- Machine Serializers -----
-
-class MachineListSerializer(serializers.ModelSerializer):
-    """Lighter serializer for listing machines"""
-    property_name = serializers.CharField(source='property.name', read_only=True)
-    maintenance_count = serializers.SerializerMethodField()
-    next_maintenance_date = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Machine
-        fields = [
-            'id', 'machine_id', 'name', 'status', 'property_name', 
-            'maintenance_count', 'next_maintenance_date', 'last_maintenance_date'
-        ]
-    
-    def get_maintenance_count(self, obj):
-        """Get count of preventive maintenances associated with this machine"""
-        return obj.preventive_maintenances.count()
-    
-    def get_next_maintenance_date(self, obj):
-        """Get the next scheduled maintenance date"""
-        return obj.get_next_maintenance_date()
-
-class MachineDetailSerializer(serializers.ModelSerializer):
-    """Detailed serializer for machine details view"""
-    property = PropertySerializer(read_only=True)
-    property_id = serializers.PrimaryKeyRelatedField(
-        queryset=Property.objects.all(),
-        source='property',
-        write_only=True
-    )
-    preventive_maintenances = PreventiveMaintenanceListSerializer(many=True, read_only=True)
-    days_since_last_maintenance = serializers.SerializerMethodField()
-    next_maintenance_date = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Machine
-        fields = [
-            'id', 'machine_id', 'name', 'description', 'location', 'property', 'property_id',
-            'status', 'installation_date', 'last_maintenance_date', 'preventive_maintenances',
-            'days_since_last_maintenance', 'next_maintenance_date', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'machine_id', 'created_at', 'updated_at']
-    
-    def get_days_since_last_maintenance(self, obj):
-        """Calculate days since last maintenance"""
-        if obj.last_maintenance_date:
-            delta = timezone.now() - obj.last_maintenance_date
-            return delta.days
-        return None
-    
-    def get_next_maintenance_date(self, obj):
-        """Get the next scheduled maintenance date"""
-        return obj.get_next_maintenance_date()
-    
-    def validate(self, data):
-        """Custom validation for machine data"""
-        installation_date = data.get('installation_date')
-        last_maintenance_date = data.get('last_maintenance_date')
-        
-        if installation_date and last_maintenance_date:
-            if last_maintenance_date.date() < installation_date:
-                raise serializers.ValidationError({
-                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
-                })
-        
-        return data
-
-class MachineCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating machines"""
-    class Meta:
-        model = Machine
-        fields = [
-            'name', 'description', 'location', 'property', 
-            'status', 'installation_date', 'last_maintenance_date'
-        ]
-    
-    def validate(self, data):
-        """Custom validation for machine creation"""
-        installation_date = data.get('installation_date')
-        last_maintenance_date = data.get('last_maintenance_date')
-        
-        if installation_date and last_maintenance_date:
-            if last_maintenance_date.date() < installation_date:
-                raise serializers.ValidationError({
-                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
-                })
-        
-        return data
-
-class MachineUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for updating machines"""
-    class Meta:
-        model = Machine
-        fields = [
-            'name', 'description', 'location', 'property', 
-            'status', 'installation_date', 'last_maintenance_date'
-        ]
-    
-    def validate(self, data):
-        """Custom validation for machine updates"""
-        installation_date = data.get('installation_date')
-        last_maintenance_date = data.get('last_maintenance_date')
-        
-        if installation_date and last_maintenance_date:
-            if last_maintenance_date.date() < installation_date:
-                raise serializers.ValidationError({
-                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
-                })
-        
-        return data
-
-class MachineSerializer(serializers.ModelSerializer):
-    """General-purpose serializer for Machine model"""
-    class Meta:
-        model = Machine
-        fields = [
-            'id', 'machine_id', 'name', 'description', 'location', 'property', 
-            'status', 'installation_date', 'last_maintenance_date', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'machine_id', 'created_at', 'updated_at']
-    
-    def validate(self, data):
-        """Custom validation for machine data"""
-        installation_date = data.get('installation_date')
-        last_maintenance_date = data.get('last_maintenance_date')
-        
-        if installation_date and last_maintenance_date:
-            if last_maintenance_date.date() < installation_date:
-                raise serializers.ValidationError({
-                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
-                })
-        
-        return data
-
-class MachineListSerializer(serializers.ModelSerializer):
-    """Lighter serializer for listing machines"""
-    property_name = serializers.CharField(source='property.name', read_only=True)
-    maintenance_count = serializers.SerializerMethodField()
-    next_maintenance_date = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Machine
-        fields = [
-            'id', 'machine_id', 'name', 'status', 'property_name', 
-            'maintenance_count', 'next_maintenance_date', 'last_maintenance_date'
-        ]
-    
-    def get_maintenance_count(self, obj):
-        """Get count of preventive maintenances associated with this machine"""
-        return obj.preventive_maintenances.count()
-    
-    def get_next_maintenance_date(self, obj):
-        """Get the next scheduled maintenance date"""
-        return obj.get_next_maintenance_date()
-
-class MachineDetailSerializer(serializers.ModelSerializer):
-    """Detailed serializer for machine details view"""
-    property = PropertySerializer(read_only=True)
-    property_id = serializers.PrimaryKeyRelatedField(
-        queryset=Property.objects.all(),
-        source='property',
-        write_only=True
-    )
-    preventive_maintenances = PreventiveMaintenanceListSerializer(many=True, read_only=True)
-    days_since_last_maintenance = serializers.SerializerMethodField()
-    next_maintenance_date = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = Machine
-        fields = [
-            'id', 'machine_id', 'name', 'description', 'location', 'property', 'property_id',
-            'status', 'installation_date', 'last_maintenance_date', 'preventive_maintenances',
-            'days_since_last_maintenance', 'next_maintenance_date', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'machine_id', 'created_at', 'updated_at']
-    
-    def get_days_since_last_maintenance(self, obj):
-        """Calculate days since last maintenance"""
-        if obj.last_maintenance_date:
-            delta = timezone.now() - obj.last_maintenance_date
-            return delta.days
-        return None
-    
-    def get_next_maintenance_date(self, obj):
-        """Get the next scheduled maintenance date"""
-        return obj.get_next_maintenance_date()
-    
-    def validate(self, data):
-        """Custom validation for machine data"""
-        installation_date = data.get('installation_date')
-        last_maintenance_date = data.get('last_maintenance_date')
-        
-        if installation_date and last_maintenance_date:
-            if last_maintenance_date.date() < installation_date:
-                raise serializers.ValidationError({
-                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
-                })
-        
-        return data
-
-class MachineCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating machines"""
-    class Meta:
-        model = Machine
-        fields = [
-            'name', 'description', 'location', 'property', 
-            'status', 'installation_date', 'last_maintenance_date'
-        ]
-    
-    def validate(self, data):
-        """Custom validation for machine creation"""
-        installation_date = data.get('installation_date')
-        last_maintenance_date = data.get('last_maintenance_date')
-        
-        if installation_date and last_maintenance_date:
-            if last_maintenance_date.date() < installation_date:
-                raise serializers.ValidationError({
-                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
-                })
-        
-        return data
-
-class MachineUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for updating machines"""
-    class Meta:
-        model = Machine
-        fields = [
-            'name', 'description', 'location', 'property', 
-            'status', 'installation_date', 'last_maintenance_date'
-        ]
-    
-    def validate(self, data):
-        """Custom validation for machine updates"""
-        installation_date = data.get('installation_date')
-        last_maintenance_date = data.get('last_maintenance_date')
-        
-        if installation_date and last_maintenance_date:
-            if last_maintenance_date.date() < installation_date:
-                raise serializers.ValidationError({
-                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
-                })
-        
-        return data
-
-class MachineSerializer(serializers.ModelSerializer):
-    """General-purpose serializer for Machine model"""
-    class Meta:
-        model = Machine
-        fields = [
-            'id', 'machine_id', 'name', 'description', 'location', 'property', 
-            'status', 'installation_date', 'last_maintenance_date', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'machine_id', 'created_at', 'updated_at']
-    
-    def validate(self, data):
-        """Custom validation for machine data"""
-        installation_date = data.get('installation_date')
-        last_maintenance_date = data.get('last_maintenance_date')
-        
-        if installation_date and last_maintenance_date:
-            if last_maintenance_date.date() < installation_date:
-                raise serializers.ValidationError({
-                    'last_maintenance_date': 'Maintenance date cannot be earlier than installation date'
-                })
-        
-        return data
-
-class MachinePreventiveMaintenanceSerializer(serializers.ModelSerializer):
-    """Serializer for associating preventive maintenance with machines"""
-    preventive_maintenance_ids = serializers.ListField(
-        child=serializers.CharField(),
-        write_only=True
-    )
-    
-    class Meta:
-        model = Machine
-        fields = ['preventive_maintenance_ids']
-    
-    def update(self, instance, validated_data):
-        pm_ids = validated_data.pop('preventive_maintenance_ids', [])
-        
-        if pm_ids:
-            pm_instances = PreventiveMaintenance.objects.filter(pm_id__in=pm_ids)
-            
-            # Get current and new pm counts for validation
-            current_count = instance.preventive_maintenances.count()
-            new_count = pm_instances.count()
-            
-            if new_count < len(pm_ids):
-                missing_ids = set(pm_ids) - set(pm_instances.values_list('pm_id', flat=True))
-                raise serializers.ValidationError({
-                    'preventive_maintenance_ids': f'Invalid maintenance IDs: {", ".join(missing_ids)}'
-                })
-            
-            # Update the many-to-many relationship
-            instance.preventive_maintenances.set(pm_instances)
-            
-            # Update last_maintenance_date if there are completed maintenances
-            latest_completed = pm_instances.filter(
-                completed_date__isnull=False
-            ).order_by('-completed_date').first()
-            
-            if latest_completed:
-                instance.last_maintenance_date = latest_completed.completed_date
-                instance.save(update_fields=['last_maintenance_date', 'updated_at'])
-        return instance
-    """Serializer for associating preventive maintenance with machines"""
-    preventive_maintenance_ids = serializers.ListField(
-        child=serializers.CharField(),
-        write_only=True
-    )
-    
-    class Meta:
-        model = Machine
-        fields = ['preventive_maintenance_ids']
-    
-    def update(self, instance, validated_data):
-        pm_ids = validated_data.pop('preventive_maintenance_ids', [])
-        
-        if pm_ids:
-            pm_instances = PreventiveMaintenance.objects.filter(pm_id__in=pm_ids)
-            
-            # Get current and new pm counts for validation
-            current_count = instance.preventive_maintenances.count()
-            new_count = pm_instances.count()
-            
-            if new_count < len(pm_ids):
-                missing_ids = set(pm_ids) - set(pm_instances.values_list('pm_id', flat=True))
-                raise serializers.ValidationError({
-                    'preventive_maintenance_ids': f'Invalid maintenance IDs: {", ".join(missing_ids)}'
-                })
-            
-            # Update the many-to-many relationship
-            instance.preventive_maintenances.set(pm_instances)
-            
-            # Update last_maintenance_date if there are completed maintenances
-            latest_completed = pm_instances.filter(
-                completed_date__isnull=False
-            ).order_by('-completed_date').first()
-            
-            if latest_completed:
-                instance.last_maintenance_date = latest_completed.completed_date
-                instance.save(update_fields=['last_maintenance_date', 'updated_at'])
-        return instance
