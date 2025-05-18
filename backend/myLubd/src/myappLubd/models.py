@@ -35,6 +35,7 @@ class PreventiveMaintenance(models.Model):
 
     # Maximum image dimensions
     MAX_SIZE = (800, 800)
+    job = models.ForeignKey('Job', on_delete=models.SET_NULL, null=True, blank=True)
     pmtitle = models.TextField(default='No title')
     pm_id = models.CharField(
         max_length=16,
