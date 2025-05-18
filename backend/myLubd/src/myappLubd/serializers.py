@@ -425,8 +425,11 @@ class PreventiveMaintenanceCompleteSerializer(serializers.ModelSerializer):
         return data
     
     
+from rest_framework import serializers
+from .models import PreventiveMaintenance, Topic, Machine
+from .serializers import TopicSerializer  # Ensure TopicSerializer is imported
+
 class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
-    
     topics = TopicSerializer(many=True, read_only=True)
     topic_ids = serializers.ListField(
         child=serializers.IntegerField(),
@@ -434,18 +437,23 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
         required=False,
         allow_empty=True
     )
+    machine_ids = serializers.ListField(
+        child=serializers.CharField(),
+        write_only=True,
+        required=False,
+        allow_empty=True
+    )
     before_image_url = serializers.SerializerMethodField()
     after_image_url = serializers.SerializerMethodField()
     property_id = serializers.SerializerMethodField()
+
     class Meta:
         model = PreventiveMaintenance
         fields = [
-            'pm_id', 'pmtitle', 'topics', 'topic_ids', 'scheduled_date', 'completed_date','property_id','machine_id', 'machines',
-            'frequency', 'custom_days', 'next_due_date',
+            'pm_id', 'pmtitle', 'topics', 'topic_ids', 'scheduled_date', 'completed_date',
+            'property_id', 'machine_ids', 'machines', 'frequency', 'custom_days', 'next_due_date',
             'before_image', 'after_image', 'before_image_url', 'after_image_url', 'notes'
         ]
-        
-        # Add this to make fields optional that don't have default values
         extra_kwargs = {
             'completed_date': {'required': False},
             'next_due_date': {'required': False},
@@ -455,6 +463,10 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
             'before_image': {'required': False},
             'after_image': {'required': False},
         }
+
+    def get_property_id(self, obj):
+        machines = obj.machines.all()
+        return [machine.property.property_id for machine in machines] if machines else []
 
     def get_before_image_url(self, obj):
         request = self.context.get('request')
@@ -467,22 +479,37 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
         if obj.after_image and request:
             return request.build_absolute_uri(obj.after_image.url)
         return None
-    
+
     def create(self, validated_data):
         topic_ids = validated_data.pop('topic_ids', [])
+        machine_ids = validated_data.pop('machine_ids', [])
         instance = super().create(validated_data)
-        
-        # Associate topics with the instance
         if topic_ids:
             instance.topics.set(topic_ids)
-        
+        if machine_ids:
+            instance.machines.set(Machine.objects.filter(machine_id__in=machine_ids))
         return instance
-    def get_property_id(self, obj):
-        machines = obj.machines.all()
-        return [machine.property.property_id for machine in machines] if machines else []
-           
-  
 
+    def update(self, instance, validated_data):
+        topic_ids = validated_data.pop('topic_ids', None)
+        machine_ids = validated_data.pop('machine_ids', None)
+        instance = super().update(instance, validated_data)
+        if topic_ids is not None:
+            instance.topics.set(topic_ids)
+        if machine_ids is not None:
+            instance.machines.set(Machine.objects.filter(machine_id__in=machine_ids))
+        return instance
+
+    def validate(self, data):
+        machine_ids = data.get('machine_ids', [])
+        if machine_ids:
+            machines = Machine.objects.filter(machine_id__in=machine_ids)
+            if len(machines) != len(machine_ids):
+                raise serializers.ValidationError("One or more machine_ids are invalid.")
+            property_ids = set(machine.property.property_id for machine in machines)
+            if len(property_ids) > 1:
+                raise serializers.ValidationError("All machines must belong to the same property.")
+        return data
 # ----- Machine Serializers -----
 
 class MachineListSerializer(serializers.ModelSerializer):
