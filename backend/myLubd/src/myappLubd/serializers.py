@@ -436,7 +436,7 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
     )
     before_image_url = serializers.SerializerMethodField()
     after_image_url = serializers.SerializerMethodField()
-
+    property_id = serializers.SerializerMethodField()
     class Meta:
         model = PreventiveMaintenance
         fields = [
@@ -477,8 +477,11 @@ class PreventiveMaintenanceSerializer(serializers.ModelSerializer):
             instance.topics.set(topic_ids)
         
         return instance
-    def get_machines(self, obj):
-        return obj.machines if obj.machines else []
+    def get_property_id(self, obj):
+        machines = obj.machines.all()
+        return [machine.property.property_id for machine in machines] if machines else []
+           
+  
 
 # ----- Machine Serializers -----
 
