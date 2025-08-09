@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")  // Ensure this points to your PostgreSQL database in .env
+}
+
+model User {
+  id         String     @id @default(uuid())  // Unique identifier
+  username   String     @unique
+  email      String?    @unique
+  profile_image String?
+  positions  String     @default("User")
+  created_at DateTime   @default(now())
+  accessToken   String?
+  refreshToken  String?
+  sessionToken  String?
+  accounts   Account[]
+  sessions   Session[]
+  properties UserProperty[] // New relation table for many-to-many properties
+}
+
+model Property {
+  id          String     @id @default(uuid())  
+  name        String
+  description String?
+  created_at  DateTime   @default(now())
+  users       UserProperty[]
+}
+
+model UserProperty {  // Join table for User <-> Property many-to-many relation
+  userId     String
+  propertyId String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property   Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@id([userId, propertyId])  // Composite primary key
+}
+
+model Account {
+  id                 String   @id @default(uuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String?  @db.Text
+  access_token       String?  @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String?  @db.Text
+  session_state      String?
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Hidden scrollbar for cleaner UI */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Custom styled scrollbar */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 9999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.7);
+}
+
+/* Card transitions */
+.card-transition {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-transition:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* Custom spinner */
+.spinner {
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-top-color: currentColor;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Touch optimization for mobile */
+@media (max-width: 640px) {
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+}
+
+/* Responsive transitions */
+.sidebar-transition {
+  transition: width 0.3s ease;
+}
+
+/* Custom utility classes */
+.text-balance {
+  text-wrap: balance;
+}
+
+.shadow-light {
+  box-shadow: 0 2px 5px 0 rgba(0, 0, 0, 0.05);
+}
+
+.shadow-hover {
+  transition: box-shadow 0.2s ease;
+}
+
+.shadow-hover:hover {
+  box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+}
+
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+}
+
+/* Better table responsiveness */
+.responsive-table {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Glass effect for panels */
+.glass {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background-color: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
