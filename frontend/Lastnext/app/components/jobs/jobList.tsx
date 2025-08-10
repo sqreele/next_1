@@ -19,15 +19,26 @@ interface JobListProps {
   jobs: Job[];
   filter: TabValue;
   properties: Property[];
+  selectedRoom?: string | null;
+  onRoomFilter?: (roomId: string | null) => void;
 }
 
-export default function JobList({ jobs, filter, properties }: JobListProps) {
+export default function JobList({ jobs, filter, properties, selectedRoom, onRoomFilter }: JobListProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>("Newest first");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [customDateRange, setCustomDateRange] = useState<{ start?: Date, end?: Date }>({});
   const { selectedProperty } = useProperty();
+
+  // Debug logging
+  console.log('🔍 JobList Debug:', {
+    jobsCount: jobs?.length || 0,
+    selectedProperty,
+    filter,
+    firstJob: jobs?.[0],
+    propertiesCount: properties?.length || 0
+  });
 
   const [itemsPerPage, setItemsPerPage] = useState(getInitialItemsPerPage());
 
@@ -100,9 +111,47 @@ export default function JobList({ jobs, filter, properties }: JobListProps) {
   };
 
   const filteredJobs = jobs.filter(job => {
-    const matchesProperty = !selectedProperty ||
+    // Debug individual job filtering
+    console.log('🔍 Filtering job:', {
+      jobId: job.job_id,
+      selectedProperty,
+      hasProfileImage: !!job.profile_image,
+      profileImageProperties: job.profile_image?.properties,
+      hasRooms: !!job.rooms,
+      roomProperties: job.rooms?.map(r => r.properties),
+      directProperties: job.properties
+    });
+
+    // More permissive property matching - if no selectedProperty, show all jobs
+    // If selectedProperty is set, try multiple ways to match
+    let matchesProperty = !selectedProperty || 
+      // Check profile_image properties
       job.profile_image?.properties?.some(p => String(p.property_id) === selectedProperty) ||
-      job.rooms?.some(r => r.properties?.some(prop => String(prop) === selectedProperty));
+      // Check room properties
+      job.rooms?.some(r => r.properties?.some(prop => String(prop) === selectedProperty)) ||
+      // Check direct properties
+      job.properties?.some(prop => {
+        if (typeof prop === 'string' || typeof prop === 'number') {
+          return String(prop) === selectedProperty;
+        }
+        if (prop && typeof prop === 'object') {
+          return String(prop.property_id || prop.id) === selectedProperty;
+        }
+        return false;
+      }) ||
+      // Check property_id field
+      String(job.property_id) === selectedProperty;
+    
+    // Temporary override for debugging - show all jobs if we're in development
+    if (process.env.NODE_ENV === 'development' && jobs.length > 0) {
+      console.log('🔧 Development mode: Allowing all jobs through filter');
+      matchesProperty = true;
+    }
+    
+    // Property filtering enabled
+    
+    console.log('🔍 Job property match result:', { jobId: job.job_id, matchesProperty });
+    
     if (!matchesProperty) return false;
 
     let matchesStatus = true;
@@ -122,10 +171,36 @@ export default function JobList({ jobs, filter, properties }: JobListProps) {
       case 'defect':
         matchesStatus = job.is_defective === true;
         break;
+      case 'preventive_maintenance':
+        matchesStatus = job.is_preventivemaintenance === true;
+        break;
     }
+    
+    console.log('🔍 Job status match result:', { 
+      jobId: job.job_id, 
+      jobStatus: job.status, 
+      filter, 
+      matchesStatus,
+      isDefective: job.is_defective,
+      isPreventiveMaintenance: job.is_preventivemaintenance
+    });
+    
+    // Status filtering enabled
+    
     if (!matchesStatus) return false;
 
-    return applyDateFilter(job);
+    const dateFilterResult = applyDateFilter(job);
+    console.log('🔍 Job date filter result:', { jobId: job.job_id, dateFilterResult });
+    
+    return dateFilterResult;
+  });
+
+  console.log('🔍 Filtering summary:', {
+    totalJobs: jobs.length,
+    filteredJobs: filteredJobs.length,
+    selectedProperty,
+    filter,
+    dateFilter
   });
 
   const sortedJobs = [...filteredJobs].sort((a, b) => {
@@ -169,6 +244,8 @@ export default function JobList({ jobs, filter, properties }: JobListProps) {
             currentSort={sortOrder}
             onDateFilter={handleDateFilterChange}
             currentDateFilter={dateFilter}
+            onRoomFilter={onRoomFilter}
+            currentRoomFilter={selectedRoom}
           />
         </div>
 
@@ -181,6 +258,15 @@ export default function JobList({ jobs, filter, properties }: JobListProps) {
               ? `No jobs match your current filters`
               : 'No property selected.'}
           </p>
+          {/* Debug information */}
+          <div className="mt-4 p-4 bg-gray-100 rounded text-left text-xs">
+            <p><strong>Debug Info:</strong></p>
+            <p>Total jobs: {jobs?.length || 0}</p>
+            <p>Selected property: {selectedProperty || 'None'}</p>
+            <p>Filtered jobs: {filteredJobs?.length || 0}</p>
+            <p>Sorted jobs: {sortedJobs?.length || 0}</p>
+            <p>Properties count: {properties?.length || 0}</p>
+          </div>
         </div>
       </div>
     );
@@ -198,6 +284,8 @@ export default function JobList({ jobs, filter, properties }: JobListProps) {
           currentSort={sortOrder}
           onDateFilter={handleDateFilterChange}
           currentDateFilter={dateFilter}
+          onRoomFilter={onRoomFilter}
+          currentRoomFilter={selectedRoom}
         />
       </div>
 

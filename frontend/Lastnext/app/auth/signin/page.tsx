@@ -3,8 +3,10 @@
 
 import { useState, FormEvent, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signIn, useSession } from 'next-auth/react';
+import { signIn } from 'next-auth/react';
 import Link from 'next/link';
+import { useRedirectIfAuthenticated } from '@/app/lib/hooks/useAuth';
+import { ERROR_TYPES, ROUTES } from '@/app/lib/config';
 
 // Create a client component that safely uses useSearchParams
 function LoginForm() {
@@ -14,14 +16,14 @@ function LoginForm() {
   const [loading, setLoading] = useState<boolean>(false);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data: session, status } = useSession();
+  const { isAuthenticated, isLoading } = useRedirectIfAuthenticated();
 
   // Redirect if already logged in
   useEffect(() => {
-    if (status === 'authenticated' && session) {
-      router.push('/dashboard');
+    if (isAuthenticated) {
+      router.push(ROUTES.dashboard);
     }
-  }, [session, status, router]);
+  }, [isAuthenticated, router]);
 
   // Check for error query parameters
   useEffect(() => {
@@ -30,13 +32,13 @@ function LoginForm() {
     
     if (errorParam) {
       switch (errorParam) {
-        case 'session_expired':
+        case ERROR_TYPES.SESSION_EXPIRED:
           setError('Your session has expired. Please log in again to continue.');
           break;
-        case 'CredentialsSignin':
+        case ERROR_TYPES.CREDENTIALS_SIGNIN:
           setError('Invalid username or password.');
           break;
-        case 'RefreshAccessTokenError':
+        case ERROR_TYPES.REFRESH_TOKEN_ERROR:
           setError('Your session could not be renewed. Please log in again.');
           break;
         default:
@@ -63,13 +65,13 @@ function LoginForm() {
       if (res?.error) {
         // Handle specific error types
         switch (res.error) {
-          case 'session_expired':
+          case ERROR_TYPES.SESSION_EXPIRED:
             setError('Your session has expired. Please log in again to continue.');
             break;
-          case 'CredentialsSignin':
+          case ERROR_TYPES.CREDENTIALS_SIGNIN:
             setError('Invalid username or password.');
             break;
-          case 'RefreshAccessTokenError':
+          case ERROR_TYPES.REFRESH_TOKEN_ERROR:
             setError('Your session could not be renewed. Please log in again.');
             break;
           default:
@@ -80,7 +82,7 @@ function LoginForm() {
         return;
       }
 
-      router.push('/dashboard');
+      router.push(ROUTES.dashboard);
       router.refresh();
     } catch (error) {
       console.error('Login failed:', error);
@@ -90,7 +92,7 @@ function LoginForm() {
   };
 
   // If checking session status, show loading
-  if (status === 'loading') {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-pulse text-lg font-medium text-gray-500">
@@ -101,7 +103,7 @@ function LoginForm() {
   }
 
   // Only render the login form if not authenticated
-  if (status === 'unauthenticated') {
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-lg">
@@ -109,7 +111,7 @@ function LoginForm() {
             <h2 className="text-3xl font-bold text-gray-900">Log In</h2>
             <p className="mt-2 text-sm text-gray-600">
               Don't have an account?{' '}
-              <Link href="/auth/register" className="font-medium text-indigo-600 hover:text-indigo-500">
+              <Link href={ROUTES.register} className="font-medium text-indigo-600 hover:text-indigo-500">
                 Sign up
               </Link>
             </p>

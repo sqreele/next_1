@@ -1,14 +1,14 @@
-import NextAuth, { NextAuthOptions } from "next-auth";
+// lib/auth.ts (or wherever your auth config is)
+import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import jwt, { JwtPayload } from "jsonwebtoken";
+import { NextAuthOptions } from "next-auth";
 import { prisma } from "@/app/lib/prisma";
 import { UserProfile, Property } from "@/app/lib/types";
 import { getUserProperties } from "./prisma-user-property";
 import { refreshAccessToken } from "./auth-helpers";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "https://pmcs.site");
+import { API_CONFIG, AUTH_CONFIG, ERROR_TYPES } from "./config";
+import { decodeToken, validateToken, getTokenExpiryTime } from "./utils/auth-utils";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -25,7 +25,7 @@ export const authOptions: NextAuthOptions = {
 
         try {
           /** 🔹 Step 1: Get authentication tokens from API */
-          const tokenResponse = await fetch(`${API_BASE_URL}/api/token/`, {
+          const tokenResponse = await fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.token}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(credentials),
@@ -43,14 +43,17 @@ export const authOptions: NextAuthOptions = {
           }
 
           /** 🔹 Step 2: Decode JWT token to get user ID and expiry */
-          const decoded = jwt.decode(tokenData.access) as JwtPayload;
-          if (!decoded || typeof decoded !== "object" || !decoded.user_id) {
+          if (!validateToken(tokenData.access)) {
+            throw new Error("Invalid access token format.");
+          }
+
+          const decoded = decodeToken(tokenData.access);
+          if (!decoded) {
             throw new Error("Failed to decode access token.");
           }
 
           const userId = String(decoded.user_id);
-          // Calculate token expiry time
-          const accessTokenExpires = decoded.exp ? decoded.exp * 1000 : Date.now() + 60 * 60 * 1000;
+          const accessTokenExpires = getTokenExpiryTime(tokenData.access) || Date.now() + 60 * 60 * 1000;
 
           /** 🔹 Step 3: Fetch user from Prisma database */
           let user = await prisma.user.findUnique({
@@ -59,7 +62,7 @@ export const authOptions: NextAuthOptions = {
 
           /** 🔹 Step 4: Fetch user profile from API */
           let profileData: Partial<UserProfile> = {};
-          const profileResponse = await fetch(`${API_BASE_URL}/api/user-profiles/${userId}/`, {
+          const profileResponse = await fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.userProfile}${userId}/`, {
             headers: { Authorization: `Bearer ${tokenData.access}`, "Content-Type": "application/json" },
           });
 
@@ -166,7 +169,7 @@ export const authOptions: NextAuthOptions = {
         
         if (refreshedToken.error) {
           console.error("Error refreshing token:", refreshedToken.error);
-          return { ...token, error: "RefreshAccessTokenError" };
+          return { ...token, error: ERROR_TYPES.REFRESH_TOKEN_ERROR };
         }
         
         console.log("Token refreshed successfully");
@@ -178,7 +181,7 @@ export const authOptions: NextAuthOptions = {
         };
       } catch (error) {
         console.error("Token refresh error:", error);
-        return { ...token, error: "RefreshAccessTokenError" };
+        return { ...token, error: ERROR_TYPES.REFRESH_TOKEN_ERROR };
       }
     },
 
@@ -209,7 +212,7 @@ export const authOptions: NextAuthOptions = {
       console.log(`User ${user.id} signed in successfully`);
     },
     async session({ session, token }) {
-      if (token.error === "RefreshAccessTokenError") {
+      if (token.error === ERROR_TYPES.REFRESH_TOKEN_ERROR) {
         console.error(`Session error: Failed to refresh access token`);
       }
     },
@@ -218,11 +221,12 @@ export const authOptions: NextAuthOptions = {
   pages: { signIn: "/auth/signin" },
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-    updateAge: 24 * 60 * 60, // Refresh every 24 hours
+    maxAge: AUTH_CONFIG.sessionMaxAge,
+    updateAge: AUTH_CONFIG.sessionUpdateAge,
   },
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV !== "production",
 };
-
-export default NextAuth(authOptions);
+export default authOptions;
+// REMOVED: Don't export NextAuth(authOptions) as default
+// export default NextAuth(authOptions);

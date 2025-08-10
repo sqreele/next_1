@@ -19,6 +19,8 @@ import { cn } from "@/app/lib/utils";
 interface JobsContentProps {
   jobs: Job[];
   properties: Property[];
+  selectedRoom?: string | null;
+  onRoomFilter?: (roomId: string | null) => void;
 }
 
 // Update the Job type or extend it here if necessary
@@ -36,7 +38,7 @@ const tabConfig = [
   { value: "preventive_maintenance", label: "Maintenance", icon: Wrench },
 ] as const;
 
-export default function JobsContent({ jobs, properties }: JobsContentProps) {
+export default function JobsContent({ jobs, properties, selectedRoom, onRoomFilter }: JobsContentProps) {
   const [currentTab, setCurrentTab] = useState<TabValue>("all");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const { selectedProperty } = useProperty();
@@ -46,12 +48,35 @@ export default function JobsContent({ jobs, properties }: JobsContentProps) {
     
     let filtered = jobs as ExtendedJob[]; // Cast to the extended type
     
+    // Property filtering
     if (selectedProperty) {
       filtered = filtered.filter(job => 
         job.profile_image?.properties?.some(
           prop => String(prop.property_id) === selectedProperty
         )
       );
+    }
+    
+    // Room filtering
+    if (selectedRoom) {
+      filtered = filtered.filter(job => {
+        if (!job.rooms || !Array.isArray(job.rooms) || job.rooms.length === 0) {
+          return false;
+        }
+        
+        return job.rooms.some((room: any) => {
+          if (typeof room === "string" || typeof room === "number") {
+            return String(room) === selectedRoom;
+          }
+          if (room && typeof room === "object" && "room_id" in room) {
+            return String(room.room_id) === selectedRoom;
+          }
+          if (room && typeof room === "object" && "id" in room) {
+            return String(room.id) === selectedRoom;
+          }
+          return false;
+        });
+      });
     }
     
     switch (currentTab) {
@@ -71,7 +96,7 @@ export default function JobsContent({ jobs, properties }: JobsContentProps) {
       default:
         return filtered;
     }
-  }, [jobs, currentTab, selectedProperty]);
+  }, [jobs, currentTab, selectedProperty, selectedRoom]);
 
   const sortedJobs = useMemo(() => {
     return [...filteredJobs].sort((a, b) => 
@@ -158,6 +183,8 @@ export default function JobsContent({ jobs, properties }: JobsContentProps) {
               jobs={sortedJobs}
               filter={value as TabValue} 
               properties={properties}
+              selectedRoom={selectedRoom}
+              onRoomFilter={onRoomFilter}
             />
           </TabsContent>
         ))}

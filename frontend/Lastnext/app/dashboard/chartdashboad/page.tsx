@@ -4,6 +4,7 @@ import { fetchJobs } from '@/app/lib/data.server'; // Import from server file
 import PropertyJobsDashboard from '@/app/components/jobs/PropertyJobsDashboard';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/lib/auth';
+import ErrorBoundary from '@/app/components/ErrorBoundary';
 
 export default async function ChartdashboardPage() {
   // Fetch session on the server
@@ -15,9 +16,11 @@ export default async function ChartdashboardPage() {
 
   return (
     <div className="space-y-4">
-      <Suspense fallback={<div>Loading...</div>}>
-        <PropertyJobsDashboard initialJobs={jobs || []} />
-      </Suspense>
+      <ErrorBoundary>
+        <Suspense fallback={<div>Loading...</div>}>
+          <PropertyJobsDashboard initialJobs={jobs || []} />
+        </Suspense>
+      </ErrorBoundary>
     </div>
   );
 }

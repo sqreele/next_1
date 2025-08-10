@@ -118,3 +118,46 @@ body {
   background-color: rgba(255, 255, 255, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
+/* Add to your global CSS or styled-components */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    -webkit-print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  .maintenance-item {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  
+  table {
+    page-break-inside: avoid;
+  }
+  
+  .header {
+    page-break-after: avoid;
+  }
+  
+  img {
+    max-height: 200px !important;
+    page-break-inside: avoid;
+  }
+}
+
+/* For better PDF rendering */
+.pdf-content {
+  background: white;
+  font-family: 'Arial', sans-serif;
+  line-height: 1.4;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}

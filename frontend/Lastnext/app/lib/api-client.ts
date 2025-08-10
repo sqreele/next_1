@@ -1,4 +1,3 @@
-
 // ./app/lib/api-client.ts - Improved version
 "use client";
 
@@ -37,8 +36,7 @@ export class ApiError extends Error {
 
 // Create API client instance with increased timeout and debugging
 const apiClient: AxiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL ||
-    (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "https://pmcs.site"),
+  baseURL: "", // Use relative URLs to go through Next.js API routes
   timeout: 30000, // Increased to 30 seconds
   headers: {
     "Content-Type": "application/json",
@@ -86,7 +84,9 @@ async function refreshToken(refreshTokenValue: string): Promise<string | null> {
   try {
     console.log("[Auth] Attempting to refresh access token...");
     // Use standard fetch or a separate axios instance to avoid interceptor loops
-    const response = await fetch(`${apiClient.defaults.baseURL}/api/token/refresh/`, {
+    const djangoBaseURL = process.env.NEXT_PUBLIC_API_URL ||
+      (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "https://pmcs.site");
+    const response = await fetch(`${djangoBaseURL}/api/token/refresh/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh: refreshTokenValue }),

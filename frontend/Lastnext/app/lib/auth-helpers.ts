@@ -1,17 +1,16 @@
-import { jwtDecode } from "jwt-decode";
+// app/lib/auth-helpers.ts
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "https://pmcs.site");
+import { jwtDecode } from "jwt-decode";
+import { API_CONFIG, ERROR_TYPES } from "./config";
 
 /**
  * Helper function to refresh the access token using the refresh token
  */
 export async function refreshAccessToken(refreshToken: string) {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/token/refresh/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const response = await fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.tokenRefresh}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh: refreshToken }),
     });
 
@@ -22,7 +21,7 @@ export async function refreshAccessToken(refreshToken: string) {
     const refreshedTokens = await response.json();
 
     if (!refreshedTokens.access) {
-      throw new Error("Refresh response did not contain access token");
+      throw new Error('Refresh response did not contain access token');
     }
 
     // Calculate expiry time from JWT
@@ -35,9 +34,9 @@ export async function refreshAccessToken(refreshToken: string) {
       accessTokenExpires: expiresAt,
     };
   } catch (error) {
-    console.error("Error refreshing access token:", error);
+    console.error('Error refreshing access token:', error);
     return {
-      error: "RefreshAccessTokenError",
+      error: ERROR_TYPES.REFRESH_TOKEN_ERROR,
     };
   }
 }

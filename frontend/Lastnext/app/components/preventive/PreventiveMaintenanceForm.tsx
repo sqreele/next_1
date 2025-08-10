@@ -17,7 +17,7 @@ import apiClient from '@/app/lib/api-client';
 import FileUpload from '@/app/components/jobs/FileUpload';
 import { useToast } from '@/app/lib/hooks/use-toast';
 import { useProperty } from '@/app/lib/PropertyContext';
-import preventiveMaintenanceService, {
+import { preventiveMaintenanceService, 
   type CreatePreventiveMaintenanceData,
   type UpdatePreventiveMaintenanceData,
 } from '@/app/lib/PreventiveMaintenanceService';
@@ -36,13 +36,14 @@ interface FormValues {
   scheduled_date: string;
   completed_date: string | null;
   frequency: FrequencyType;
-  custom_days: number | '';
+  custom_days: number | '' | null;
   notes: string;
   before_image_file: File | null;
   after_image_file: File | null;
   selected_topics: number[];
   selected_machine_ids: string[];
   property_id: string | null;
+  procedure: string;
 }
 
 // Helper component to handle effects based on Formik's values
@@ -161,6 +162,13 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
         ? Array.from(new Set([machineId, ...machineIdsFromData]))
         : machineIdsFromData;
 
+      const propertyDetails = getPropertyDetails(currentData.property_id);
+      const propertyId = propertyDetails.id || contextSelectedProperty || null;
+
+      const customDays = currentData.custom_days === null || currentData.custom_days === undefined ? '' : currentData.custom_days;
+      const selectedTopics = topicIds || [];
+      const selectedMachineIds = finalMachineIds || [];
+
       return {
         pmtitle: currentData.pmtitle || '',
         scheduled_date: currentData.scheduled_date
@@ -170,13 +178,14 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
           ? formatDateForInput(new Date(currentData.completed_date))
           : null,
         frequency: validateFrequency(currentData.frequency || 'monthly'),
-        custom_days: currentData.custom_days ?? '',
+        custom_days: customDays,
         notes: currentData.notes || '',
         before_image_file: null,
         after_image_file: null,
-        selected_topics: topicIds,
-        selected_machine_ids: finalMachineIds,
-        property_id: getPropertyDetails(currentData.property_id).id ?? contextSelectedProperty ?? null,
+        selected_topics: selectedTopics,
+        selected_machine_ids: selectedMachineIds,
+        property_id: propertyId,
+        procedure: currentData.procedure || '',
       };
     }
 
@@ -191,7 +200,8 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
       after_image_file: null,
       selected_topics: [],
       selected_machine_ids: machineId ? [machineId] : [],
-      property_id: contextSelectedProperty ?? null,
+      property_id: contextSelectedProperty || null,
+      procedure: '',
     };
   }, [actualInitialData, contextSelectedProperty, machineId]);
 
@@ -234,16 +244,38 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
   }, []);
 
   useEffect(() => {
-    fetchAvailableTopics();
+    let mounted = true;
+    const loadData = async () => {
+      try {
+        await fetchAvailableTopics();
+        if (mounted) {
+          setLoadingTopics(false);
+        }
+      } catch (err) {
+        if (mounted) {
+          console.error('Error loading topics:', err);
+          setError('Failed to load topics. Please try again.');
+          setLoadingTopics(false);
+        }
+      }
+    };
+
+    loadData();
+    return () => {
+      mounted = false;
+    };
   }, [fetchAvailableTopics]);
 
   useEffect(() => {
+    let mounted = true;
     if (pmId && !initialDataProp) {
       setIsLoading(true);
       clearError();
       preventiveMaintenanceService
         .getPreventiveMaintenanceById(pmId)
         .then((response) => {
+          if (!mounted) return;
+          
           if (response.success && response.data) {
             console.log('[PreventiveMaintenanceForm] Fetched maintenance data:', response.data);
             setFetchedInitialData(response.data);
@@ -261,12 +293,15 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
           }
         })
         .catch((err) => {
+          if (!mounted) return;
           console.error('Error fetching maintenance data:', err);
           setError(err.message || 'Failed to fetch maintenance data');
           setFetchedInitialData(null);
         })
         .finally(() => {
-          setIsLoading(false);
+          if (mounted) {
+            setIsLoading(false);
+          }
         });
     } else if (initialDataProp) {
       console.log('[PreventiveMaintenanceForm] Using initialDataProp:', initialDataProp);
@@ -280,6 +315,10 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
         console.warn('[PreventiveMaintenanceForm] Missing machine_id/machines in initialDataProp');
       }
     }
+
+    return () => {
+      mounted = false;
+    };
   }, [pmId, initialDataProp]);
 
   const handleFileSelection = (
@@ -318,6 +357,7 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
 
   const handleSubmit = async (values: FormValues, formikHelpers: FormikHelpers<FormValues>) => {
     const { setSubmitting, resetForm } = formikHelpers;
+    let isMounted = true;
 
     clearError();
     setSubmitError(null);
@@ -335,14 +375,15 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
         pmtitle: values.pmtitle.trim() || 'Untitled Maintenance',
         scheduled_date: values.scheduled_date,
         frequency: values.frequency,
-        custom_days: values.frequency === 'custom' && values.custom_days ? Number(values.custom_days) : null,
-        notes: values.notes?.trim() || undefined,
-        property_id: values.property_id || undefined,
-        topic_ids: values.selected_topics && values.selected_topics.length > 0 ? values.selected_topics : undefined,
-        machine_ids: values.selected_machine_ids && values.selected_machine_ids.length > 0 ? values.selected_machine_ids : undefined,
+        custom_days: values.frequency === 'custom' && values.custom_days ? Number(values.custom_days) : undefined,
+        notes: values.notes?.trim() || '',
+        property_id: values.property_id || '',
+        topic_ids: values.selected_topics && values.selected_topics.length > 0 ? values.selected_topics : [],
+        machine_ids: values.selected_machine_ids && values.selected_machine_ids.length > 0 ? values.selected_machine_ids : [],
         completed_date: values.completed_date || undefined,
         before_image: hasBeforeImageFile ? values.before_image_file! : undefined,
         after_image: hasAfterImageFile ? values.after_image_file! : undefined,
+        procedure: values.procedure?.trim() || '',
       };
 
       console.log('[FORM] handleSubmit - Data prepared for service:', JSON.stringify(dataForService, (key, value) => {
@@ -363,6 +404,8 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
       } else {
         response = await preventiveMaintenanceService.createPreventiveMaintenance(dataForService);
       }
+
+      if (!isMounted) return;
 
       console.log('[FORM] handleSubmit - Service response:', response);
 
@@ -385,6 +428,8 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
         throw new Error(errMsg);
       }
     } catch (error: any) {
+      if (!isMounted) return;
+      
       console.error('[FORM] handleSubmit - Error submitting form:', error);
       let errorMessage = 'An unexpected error occurred.';
       if (error.response?.data) {
@@ -404,9 +449,11 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
       setSubmitError(errorMessage);
       toast.error(errorMessage);
     } finally {
-      setSubmitting(false);
-      setIsLoading(false);
-      setIsImageUploading(false);
+      if (isMounted) {
+        setSubmitting(false);
+        setIsLoading(false);
+        setIsImageUploading(false);
+      }
     }
   };
 
@@ -580,6 +627,21 @@ const PreventiveMaintenanceForm: React.FC<PreventiveMaintenanceFormProps> = ({
                 rows={4}
                 className="w-full p-2 border border-gray-300 rounded-md"
                 placeholder="Enter any notes for this maintenance task"
+              />
+            </div>
+
+            {/* Procedure */}
+            <div className="mb-6">
+              <label htmlFor="procedure" className="block text-sm font-medium text-gray-700 mb-1">
+                Procedure
+              </label>
+              <Field
+                as="textarea"
+                id="procedure"
+                name="procedure"
+                rows={4}
+                className="w-full p-2 border border-gray-300 rounded-md"
+                placeholder="Enter the maintenance procedure"
               />
             </div>
 

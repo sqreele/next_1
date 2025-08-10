@@ -1,8 +1,6 @@
 import { Job, Property, JobStatus, Room } from "./types";
-
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "https://pmcs.site");
+import { API_CONFIG } from "./config";
+import { fixJobsImageUrls, fixJobImageUrls, sanitizeJobsData, sanitizeJobData } from "./utils/image-utils";
 
 export class ApiError extends Error {
   status: number;
@@ -39,10 +37,17 @@ export async function fetchWithToken<T>(
     options.body = JSON.stringify(body);
   }
 
-  console.log(`${method} ${url}`, options);
+  // Handle relative URLs by making them absolute for server-side requests
+  let absoluteUrl = url;
+  if (url.startsWith('/')) {
+    // For server-side requests, we need to use the Django backend directly
+    absoluteUrl = `${API_CONFIG.baseUrl}${url}`;
+  }
+
+  console.log(`${method} ${absoluteUrl}`, options);
 
   try {
-    const response = await fetch(url, options);
+    const response = await fetch(absoluteUrl, options);
     const responseText = await response.text();
 
     console.log(
@@ -70,7 +75,7 @@ export async function fetchWithToken<T>(
     }
 
     if (!responseText.trim()) {
-      if (method === "GET" && url.includes("/api/jobs") && !url.includes("/my-jobs/")) {
+      if (method === "GET" && absoluteUrl.includes("/api/jobs") && !absoluteUrl.includes("/my-jobs/")) {
         return [] as unknown as T;
       }
       throw new ApiError(204, "Received empty response from server");
@@ -86,7 +91,7 @@ export async function fetchWithToken<T>(
       );
     }
   } catch (error) {
-    console.error(`Error during ${method} request to ${url}:`, error);
+    console.error(`Error during ${method} request to ${absoluteUrl}:`, error);
     if (error instanceof ApiError) {
       throw error;
     }
@@ -95,23 +100,35 @@ export async function fetchWithToken<T>(
 }
 
 export async function fetchProperties(accessToken?: string): Promise<Property[]> {
-  return fetchWithToken<Property[]>(`${API_BASE_URL}/api/properties/`, accessToken);
+  return fetchWithToken<Property[]>('/api/properties/', accessToken);
 }
 
 export async function fetchJobsForProperty(
   propertyId: string,
   accessToken?: string
 ): Promise<Job[]> {
-  return fetchWithToken<Job[]>(`${API_BASE_URL}/api/jobs/?property=${propertyId}`, accessToken);
+  try {
+    const jobs = await fetchWithToken<Job[]>(`/api/jobs/?property=${propertyId}`, accessToken);
+    console.log(`📋 Jobs fetched: { count: ${jobs.length} }`);
+    const sanitizedJobs = sanitizeJobsData(jobs);
+    return fixJobsImageUrls(sanitizedJobs);
+  } catch (error) {
+    console.error('Error in fetchJobsForProperty:', error);
+    throw error;
+  }
 }
 
 export async function fetchJobs(accessToken?: string): Promise<Job[]> {
-  return fetchWithToken<Job[]>(`${API_BASE_URL}/api/jobs/`, accessToken);
+  const jobs = await fetchWithToken<Job[]>('/api/jobs/', accessToken);
+  const sanitizedJobs = sanitizeJobsData(jobs);
+  return fixJobsImageUrls(sanitizedJobs);
 }
 
 export async function fetchJob(jobId: string, accessToken?: string): Promise<Job | null> {
   try {
-    return await fetchWithToken<Job>(`${API_BASE_URL}/api/jobs/${jobId}/`, accessToken);
+    const job = await fetchWithToken<Job>(`/api/jobs/${jobId}/`, accessToken);
+    const sanitizedJob = sanitizeJobData(job);
+    return fixJobImageUrls(sanitizedJob);
   } catch (error) {
     console.error(`Error fetching job ${jobId}:`, error);
     return null;
@@ -123,11 +140,11 @@ export async function updateJob(
   jobData: Partial<Job>,
   accessToken?: string
 ): Promise<Job> {
-  return fetchWithToken<Job>(`${API_BASE_URL}/api/jobs/${jobId}/`, accessToken, "PATCH", jobData);
+  return fetchWithToken<Job>(`/api/jobs/${jobId}/`, accessToken, "PATCH", jobData);
 }
 
 export async function deleteJob(jobId: string, accessToken?: string): Promise<void> {
-  await fetchWithToken<void>(`${API_BASE_URL}/api/jobs/${jobId}/`, accessToken, "DELETE");
+  await fetchWithToken<void>(`/api/jobs/${jobId}/`, accessToken, "DELETE");
 }
 
 export async function updateJobStatus(
@@ -135,16 +152,18 @@ export async function updateJobStatus(
   status: JobStatus,
   accessToken?: string
 ): Promise<Job> {
-  return fetchWithToken<Job>(`${API_BASE_URL}/api/jobs/${jobId}/`, accessToken, "PATCH", { status });
+  return fetchWithToken<Job>(`/api/jobs/${jobId}/`, accessToken, "PATCH", { status });
 }
 
 export async function fetchMyJobs(accessToken?: string): Promise<Job[]> {
-  return fetchWithToken<Job[]>(`${API_BASE_URL}/api/jobs/my-jobs/`, accessToken);
+  const jobs = await fetchWithToken<Job[]>('/api/jobs/my-jobs/', accessToken);
+  const sanitizedJobs = sanitizeJobsData(jobs);
+  return fixJobsImageUrls(sanitizedJobs);
 }
 
 export async function fetchRoom(roomId: string, accessToken?: string): Promise<Room | null> {
   try {
-    return await fetchWithToken<Room>(`${API_BASE_URL}/api/rooms/${roomId}/`, accessToken);
+    return await fetchWithToken<Room>(`/api/rooms/${roomId}/`, accessToken);
   } catch (error) {
     console.error(`Error fetching room ${roomId}:`, error);
     return null;
@@ -152,5 +171,7 @@ export async function fetchRoom(roomId: string, accessToken?: string): Promise<R
 }
 
 export async function fetchJobsForRoom(roomId: string, accessToken?: string): Promise<Job[]> {
-  return fetchWithToken<Job[]>(`${API_BASE_URL}/api/jobs/?room=${roomId}`, accessToken);
+  const jobs = await fetchWithToken<Job[]>(`/api/jobs/?room=${roomId}`, accessToken);
+  const sanitizedJobs = sanitizeJobsData(jobs);
+  return fixJobsImageUrls(sanitizedJobs);
 }

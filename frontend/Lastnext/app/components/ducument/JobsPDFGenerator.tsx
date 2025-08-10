@@ -23,13 +23,13 @@ const styles = StyleSheet.create({
   page: {
     padding: 20,
     backgroundColor: '#ffffff',
-    fontFamily: 'Sarabun', // ✅ Set Thai font
+    fontFamily: 'Sarabun',
   },
   header: {
-    marginBottom: 20,
+    marginBottom: 15,
     borderBottomWidth: 1,
     borderColor: '#eee',
-    padding: 10,
+    paddingBottom: 10,
   },
   headerText: {
     fontSize: 14,
@@ -44,46 +44,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderColor: '#eee',
-    padding: 10,
-    minHeight: 150,
+    paddingVertical: 8,
+    paddingHorizontal: 5,
+    minHeight: 80, // ลดความสูงขั้นต่ำ
+    maxHeight: 120, // กำหนดความสูงสูงสุด
+    marginBottom: 5,
+    break: false, // ป้องกันการแบ่งแถว
   },
   imageColumn: {
-    width: '30%',
-    marginRight: 15
+    width: '25%', // ลดขนาดรูป
+    marginRight: 10
   },
   infoColumn: {
-    width: '35%',
-    paddingRight: 10
+    width: '40%', // เพิ่มพื้นที่สำหรับข้อมูล
+    paddingRight: 8
   },
   dateColumn: {
     width: '35%'
   },
   jobImage: {
     width: '100%',
-    height: 120,
+    height: 60, // ลดความสูงรูป
     objectFit: 'cover'
   },
   label: {
-    fontSize: 10,
+    fontSize: 8, // ลดขนาดฟอนต์
     color: '#666',
-    marginBottom: 2
+    marginBottom: 1
   },
   value: {
-    fontSize: 10,
-    marginBottom: 8
+    fontSize: 8, // ลดขนาดฟอนต์
+    marginBottom: 3,
+    lineHeight: 1.2 // ลดระยะห่างบรรทัด
   },
   statusBadge: {
-    fontSize: 10,
+    fontSize: 8,
     color: '#1a56db',
-    marginBottom: 8
+    marginBottom: 3
   },
   priorityBadge: {
-    fontSize: 10,
-    marginBottom: 8
+    fontSize: 8,
+    marginBottom: 3
   },
   dateText: {
-    fontSize: 10,
-    marginBottom: 4
+    fontSize: 8,
+    marginBottom: 2,
+    lineHeight: 1.1
+  },
+  // เพิ่ม style สำหรับข้อความที่อาจยาว
+  truncatedText: {
+    fontSize: 8,
+    marginBottom: 3,
+    lineHeight: 1.2,
+    maxLines: 2, // จำกัดจำนวนบรรทัด
   }
 });
 
@@ -127,70 +140,99 @@ const JobsPDFDocument: React.FC<JobsPDFDocumentProps> = ({ jobs, filter, selecte
     return 'User';
   };
 
+  // ฟังก์ชันตัดข้อความที่ยาวเกินไป
+  const truncateText = (text: string, maxLength: number = 100): string => {
+    if (!text) return '';
+    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+  };
+
+  // แบ่ง jobs เป็นกลุมๆ เพื่อป้องกันการตกหน้า
+  const jobsPerPage = 8; // จำนวน jobs ต่อหน้า
+  const pageGroups = [];
+  for (let i = 0; i < filteredJobs.length; i += jobsPerPage) {
+    pageGroups.push(filteredJobs.slice(i, i + jobsPerPage));
+  }
+
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <View style={styles.header}>
-          <Text style={styles.headerText}>{propertyName || 'Unnamed Property'}</Text>
-          <Text style={styles.subHeaderText}>{FILTER_TITLES[filter] || 'Job Report'}</Text>
-          <Text style={styles.label}>Total Jobs: {filteredJobs.length}</Text>
-        </View>
-
-        {filteredJobs.map((job) => (
-          <View key={job.job_id} style={styles.jobRow}>
-            <View style={styles.imageColumn}>
-              {job.images && job.images.length > 0 && (
-                <Image
-                  src={job.images[0].image_url}
-                  style={styles.jobImage}
-                />
-              )}
+      {pageGroups.map((jobGroup, pageIndex) => (
+        <Page key={pageIndex} size="A4" style={styles.page}>
+          {/* แสดง header เฉพาะหน้าแรก */}
+          {pageIndex === 0 && (
+            <View style={styles.header}>
+              <Text style={styles.headerText}>{propertyName || 'Unnamed Property'}</Text>
+              <Text style={styles.subHeaderText}>{FILTER_TITLES[filter] || 'Job Report'}</Text>
+              <Text style={styles.label}>Total Jobs: {filteredJobs.length}</Text>
             </View>
+          )}
 
-            <View style={styles.infoColumn}>
-              <Text style={styles.label}>
-                Location: {job.rooms?.[0]?.name || 'N/A'}
-              </Text>
-              {job.rooms?.[0]?.room_type && (
-                <Text style={styles.label}>Room type: {job.rooms[0].room_type}</Text>
-              )}
-              <Text style={styles.label}>
-                Topics: {job.topics?.length ? job.topics.map(t => t.title || 'N/A').join(', ') : 'None'}
-              </Text>
-              <Text style={styles.statusBadge}>Status: {job.status.replace('_', ' ')}</Text>
-              <Text style={{
-                ...styles.priorityBadge,
-                color: getPriorityColor(job.priority)
-              }}>
-                Priority: {job.priority}
-              </Text>
-              <Text style={styles.label}>
-                Staff: {getUserDisplayName(job.user)}
-              </Text>
+          {/* แสดง page number สำหรับหน้าที่ 2 เป็นต้นไป */}
+          {pageIndex > 0 && (
+            <View style={{ marginBottom: 15, alignItems: 'center' }}>
+              <Text style={styles.subHeaderText}>Page {pageIndex + 1}</Text>
             </View>
+          )}
 
-            <View style={styles.dateColumn}>
-              {job.description && (
-                <>
-                  <Text style={styles.label}>Description:</Text>
-                  <Text style={styles.value}>{job.description}</Text>
-                </>
-              )}
-              {job.remarks && (
-                <>
-                  <Text style={styles.label}>Remarks:</Text>
-                  <Text style={styles.value}>{job.remarks}</Text>
-                </>
-              )}
-              <Text style={styles.dateText}>Created: {formatDate(job.created_at)}</Text>
-              <Text style={styles.dateText}>Updated: {formatDate(job.updated_at)}</Text>
-              {job.completed_at && (
-                <Text style={styles.dateText}>Completed: {formatDate(job.completed_at)}</Text>
-              )}
+          {jobGroup.map((job) => (
+            <View key={job.job_id} style={styles.jobRow} wrap={false}>
+              <View style={styles.imageColumn}>
+                {job.images && job.images.length > 0 && (
+                  <Image
+                    src={job.images[0].image_url}
+                    style={styles.jobImage}
+                  />
+                )}
+              </View>
+
+              <View style={styles.infoColumn}>
+                <Text style={styles.label}>
+                  Location: {job.rooms?.[0]?.name || 'N/A'}
+                </Text>
+                {job.rooms?.[0]?.room_type && (
+                  <Text style={styles.label}>Room: {job.rooms[0].room_type}</Text>
+                )}
+                <Text style={styles.label}>
+                  Topics: {job.topics?.length ? job.topics.map(t => t.title || 'N/A').join(', ') : 'None'}
+                </Text>
+                <Text style={styles.statusBadge}>Status: {job.status.replace('_', ' ')}</Text>
+                <Text style={{
+                  ...styles.priorityBadge,
+                  color: getPriorityColor(job.priority)
+                }}>
+                  Priority: {job.priority}
+                </Text>
+                <Text style={styles.label}>
+                  Staff: {getUserDisplayName(job.user)}
+                </Text>
+              </View>
+
+              <View style={styles.dateColumn}>
+                {job.description && (
+                  <>
+                    <Text style={styles.label}>Description:</Text>
+                    <Text style={styles.truncatedText}>
+                      {truncateText(job.description, 80)}
+                    </Text>
+                  </>
+                )}
+                {job.remarks && (
+                  <>
+                    <Text style={styles.label}>Remarks:</Text>
+                    <Text style={styles.truncatedText}>
+                      {truncateText(job.remarks, 80)}
+                    </Text>
+                  </>
+                )}
+                <Text style={styles.dateText}>Created: {formatDate(job.created_at)}</Text>
+                <Text style={styles.dateText}>Updated: {formatDate(job.updated_at)}</Text>
+                {job.completed_at && (
+                  <Text style={styles.dateText}>Completed: {formatDate(job.completed_at)}</Text>
+                )}
+              </View>
             </View>
-          </View>
-        ))}
-      </Page>
+          ))}
+        </Page>
+      ))}
     </Document>
   );
 };

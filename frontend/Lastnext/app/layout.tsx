@@ -7,6 +7,8 @@ import { UserProvider } from '@/app/lib/user-context';
 import { PropertyProvider } from './lib/PropertyContext';
 import './globals.css';
 import { JobProvider } from '@/app/lib/JobContext';
+import { PreventiveMaintenanceProvider } from '@/app/lib/PreventiveContext';
+import { FilterProvider } from '@/app/lib/FilterContext';
 // Initialize Inter font
 const inter = Inter({
   subsets: ['latin'],
@@ -87,9 +89,13 @@ export default function RootLayout({ children }: RootLayoutProps) {
           <UserProvider>
             <PropertyProvider>
               <JobProvider>
+              <PreventiveMaintenanceProvider>
+              <FilterProvider>
               <main className="flex min-h-screen w-full flex-col">
                 {children}
               </main>
+              </FilterProvider>
+              </PreventiveMaintenanceProvider>
               <Toaster />
               </JobProvider>
             </PropertyProvider>

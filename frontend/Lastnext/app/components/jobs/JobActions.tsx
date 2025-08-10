@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, FileDown, Filter, SortAsc, SortDesc, Building, Calendar } from "lucide-react";
+import { Plus, FileDown, Filter, SortAsc, SortDesc, Building, Calendar, DoorOpen } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import CreateJobButton from "@/app/components/jobs/CreateJobButton";
 import { pdf } from "@react-pdf/renderer";
@@ -17,7 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from "@/app/components/ui/dropdown-menu";
-import { SortOrder, Job, Property, TabValue } from "@/app/lib/types";
+import { SortOrder, Job, Property, TabValue, Room } from "@/app/lib/types";
 import { format } from "date-fns";
 
 type DateFilter = "all" | "today" | "yesterday" | "thisWeek" | "thisMonth" | "custom";
@@ -32,6 +32,8 @@ interface JobActionsProps {
   currentSort?: SortOrder;
   onDateFilter?: (filter: DateFilter, startDate?: Date, endDate?: Date) => void;
   currentDateFilter?: DateFilter;
+  onRoomFilter?: (roomId: string | null) => void;
+  currentRoomFilter?: string | null;
   jobs?: Job[];
   onRefresh?: () => void;
   currentTab?: TabValue;
@@ -43,6 +45,8 @@ export default function JobActions({
   currentSort = "Newest first",
   onDateFilter,
   currentDateFilter = "all",
+  onRoomFilter,
+  currentRoomFilter = null,
   jobs = [],
   onRefresh,
   currentTab = "all",
@@ -50,6 +54,8 @@ export default function JobActions({
 }: JobActionsProps) {
   const router = useRouter();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [isLoadingRooms, setIsLoadingRooms] = useState(false);
   const { selectedProperty, setSelectedProperty } = useProperty() as PropertyContextType;
 
   const getDateFilterLabel = (filter: DateFilter) => {
@@ -72,6 +78,44 @@ export default function JobActions({
     const property = properties.find((p) => p.property_id === propertyId);
     return property?.name || "Unknown Property";
   };
+
+  const getRoomName = (roomId: string | null) => {
+    if (!roomId) return "All Rooms";
+    const room = rooms.find((r) => String(r.room_id) === roomId);
+    console.log('🏠 Room lookup:', { roomId, foundRoom: room, totalRooms: rooms.length });
+    return room?.name || "Unknown Room";
+  };
+
+  // Fetch rooms when property changes
+  useEffect(() => {
+    const fetchRooms = async () => {
+      if (!selectedProperty) {
+        setRooms([]);
+        return;
+      }
+
+      setIsLoadingRooms(true);
+      try {
+        console.log('🔄 Fetching rooms for property:', selectedProperty);
+        const response = await fetch(`/api/rooms/?property=${selectedProperty}`);
+        if (response.ok) {
+          const roomsData = await response.json();
+          console.log('📋 Rooms fetched:', roomsData);
+          setRooms(roomsData);
+        } else {
+          console.error('❌ Failed to fetch rooms:', response.status);
+          setRooms([]);
+        }
+      } catch (error) {
+        console.error('❌ Error fetching rooms:', error);
+        setRooms([]);
+      } finally {
+        setIsLoadingRooms(false);
+      }
+    };
+
+    fetchRooms();
+  }, [selectedProperty]);
 
   const handleDateFilterChange = (filter: DateFilter) => {
     if (onDateFilter) {
@@ -117,31 +161,58 @@ export default function JobActions({
   };
 
   const filteredJobsCount = jobs.filter((job) => {
-    if (!selectedProperty) return true;
+    // Property filtering
+    if (selectedProperty) {
+      if (!job.properties || !Array.isArray(job.properties) || job.properties.length === 0) {
+        return false;
+      }
 
-    if (!job.properties || !Array.isArray(job.properties) || job.properties.length === 0) {
-      return false;
+      const hasProperty = job.properties.some((prop: any) => {
+        if (typeof prop === "string" || typeof prop === "number") {
+          return String(prop) === selectedProperty;
+        }
+        if (prop && typeof prop === "object" && "property_id" in prop) {
+          return String(prop.property_id) === selectedProperty;
+        }
+        if (prop && typeof prop === "object" && "id" in prop) {
+          return String(prop.id) === selectedProperty;
+        }
+        if (prop && typeof prop === "object") {
+          return Object.values(prop).some(
+            (value) =>
+              (typeof value === "string" || typeof value === "number") &&
+              String(value) === selectedProperty
+          );
+        }
+        return false;
+      });
+
+      if (!hasProperty) return false;
     }
 
-    return job.properties.some((prop: any) => {
-      if (typeof prop === "string" || typeof prop === "number") {
-        return String(prop) === selectedProperty;
+    // Room filtering
+    if (currentRoomFilter) {
+      if (!job.rooms || !Array.isArray(job.rooms) || job.rooms.length === 0) {
+        return false;
       }
-      if (prop && typeof prop === "object" && "property_id" in prop) {
-        return String(prop.property_id) === selectedProperty;
-      }
-      if (prop && typeof prop === "object" && "id" in prop) {
-        return String(prop.id) === selectedProperty;
-      }
-      if (prop && typeof prop === "object") {
-        return Object.values(prop).some(
-          (value) =>
-            (typeof value === "string" || typeof value === "number") &&
-            String(value) === selectedProperty
-        );
-      }
-      return false;
-    });
+
+      const hasRoom = job.rooms.some((room: any) => {
+        if (typeof room === "string" || typeof room === "number") {
+          return String(room) === currentRoomFilter;
+        }
+        if (room && typeof room === "object" && "room_id" in room) {
+          return String(room.room_id) === currentRoomFilter;
+        }
+        if (room && typeof room === "object" && "id" in room) {
+          return String(room.id) === currentRoomFilter;
+        }
+        return false;
+      });
+
+      if (!hasRoom) return false;
+    }
+
+    return true;
   }).length;
 
   const menuItemClass = "flex items-center gap-2 px-3 py-2 text-sm text-zinc-100 hover:bg-zinc-800 hover:text-white cursor-pointer";
@@ -211,6 +282,48 @@ export default function JobActions({
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className={buttonClass}
+              disabled={!selectedProperty || isLoadingRooms}
+            >
+              <DoorOpen className="h-4 w-4" />
+              <span className="truncate max-w-[120px]">
+                {isLoadingRooms ? "Loading..." : getRoomName(currentRoomFilter)}
+              </span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className={dropdownContentClass}>
+            <DropdownMenuLabel className={menuLabelClass}>Rooms</DropdownMenuLabel>
+            <DropdownMenuItem 
+              onClick={() => onRoomFilter?.(null)} 
+              className={menuItemClass}
+              disabled={!selectedProperty}
+            >
+              <DoorOpen className="h-4 w-4" />
+              All Rooms
+            </DropdownMenuItem>
+            {rooms.map((room) => (
+              <DropdownMenuItem
+                key={room.room_id}
+                onClick={() => onRoomFilter?.(String(room.room_id))}
+                className={menuItemClass}
+              >
+                <DoorOpen className="h-4 w-4" />
+                <span className="truncate">{room.name}</span>
+              </DropdownMenuItem>
+            ))}
+            {rooms.length === 0 && selectedProperty && !isLoadingRooms && (
+              <DropdownMenuItem disabled className={menuItemClass}>
+                <span className="text-zinc-500">No rooms available</span>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className={buttonClass}>
               <Filter className="h-4 w-4" />
               <span>{currentSort}</span>
@@ -265,6 +378,31 @@ export default function JobActions({
                 <span className="truncate">{property.name}</span>
               </DropdownMenuItem>
             ))}
+            <DropdownMenuSeparator className="bg-zinc-800 my-1" />
+
+            <DropdownMenuLabel className={menuLabelClass}>Rooms</DropdownMenuLabel>
+            <DropdownMenuItem 
+              onClick={() => onRoomFilter?.(null)} 
+              className={menuItemClass}
+              disabled={!selectedProperty}
+            >
+              <DoorOpen className="h-4 w-4" /> All Rooms
+            </DropdownMenuItem>
+            {rooms.map((room) => (
+              <DropdownMenuItem
+                key={room.room_id}
+                onClick={() => onRoomFilter?.(String(room.room_id))}
+                className={menuItemClass}
+              >
+                <DoorOpen className="h-4 w-4" />
+                <span className="truncate">{room.name}</span>
+              </DropdownMenuItem>
+            ))}
+            {rooms.length === 0 && selectedProperty && !isLoadingRooms && (
+              <DropdownMenuItem disabled className={menuItemClass}>
+                <span className="text-zinc-500">No rooms available</span>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator className="bg-zinc-800 my-1" />
 
             <DropdownMenuLabel className={menuLabelClass}>Date Range</DropdownMenuLabel>
