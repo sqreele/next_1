@@ -10,9 +10,41 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='userprofile',
-            name='last_login_google',
-            field=models.DateTimeField(blank=True, null=True),
-        ),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunSQL(
+                    sql=(
+                        """
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'myappLubd_userprofile'
+          AND column_name = 'last_login_google'
+    ) THEN
+        ALTER TABLE "myappLubd_userprofile"
+            ADD COLUMN "last_login_google" timestamp with time zone NULL;
+    END IF;
+END
+$$;
+                        """
+                    ),
+                    reverse_sql=(
+                        """
+ALTER TABLE "myappLubd_userprofile"
+    DROP COLUMN IF EXISTS "last_login_google";
+                        """
+                    ),
+                )
+            ],
+            state_operations=[
+                migrations.AddField(
+                    model_name='userprofile',
+                    name='last_login_google',
+                    field=models.DateTimeField(blank=True, null=True),
+                ),
+            ],
+        )
     ]
