@@ -320,6 +320,7 @@ class PreventiveMaintenanceListSerializer(serializers.ModelSerializer):
     topics = TopicSerializer(many=True)
     machines = serializers.SerializerMethodField()
     property_id = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
 
     class Meta:
         model = PreventiveMaintenance
@@ -343,6 +344,13 @@ class PreventiveMaintenanceListSerializer(serializers.ModelSerializer):
             return []
         properties = Property.objects.filter(rooms__job=obj.job).distinct()
         return [prop.property_id for prop in properties]
+
+    def get_status(self, obj):
+        if obj.completed_date:
+            return 'completed'
+        if obj.scheduled_date and obj.scheduled_date < timezone.now():
+            return 'overdue'
+        return 'pending'
 class MachineDetailSerializer(serializers.ModelSerializer):
     """Detailed serializer for machine details view"""
     property = PropertySerializer(read_only=True)
