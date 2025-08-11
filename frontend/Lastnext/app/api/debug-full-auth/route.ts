@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/lib/auth';
+import { getErrorMessage } from '@/app/lib/utils/error-utils';
+
+interface DjangoTestResult {
+  status: number;
+  ok: boolean;
+  statusText: string;
+  dataLength?: number;
+  dataType?: string;
+  error?: string;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -37,7 +47,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Test Django API call if we have a token
-    let djangoTestResult: any = null;
+    let djangoTestResult: DjangoTestResult | null = null;
     if (session?.user?.accessToken) {
       try {
         console.log('🧪 Testing Django API with token...');
@@ -65,7 +75,12 @@ export async function GET(request: NextRequest) {
         console.log('🧪 Django API test result:', djangoTestResult);
       } catch (error) {
         console.error('🧪 Django API test error:', error);
-        djangoTestResult = { error: (error as Error).message };
+        djangoTestResult = { 
+          status: 0, 
+          ok: false, 
+          statusText: 'Error',
+          error: getErrorMessage(error) 
+        };
       }
     } else {
       console.log('🧪 No access token available for Django API test');
@@ -109,8 +124,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('🧪 Auth debug error:', error);
     return NextResponse.json({
-      error: (error as Error).message,
-      stack: (error as Error).stack,
+      error: getErrorMessage(error),
       timestamp: new Date().toISOString()
     }, { status: 500 });
   }
