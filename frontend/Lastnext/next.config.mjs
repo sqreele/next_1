@@ -18,15 +18,59 @@ const nextConfig = {
       { protocol: 'http', hostname: 'django-backend', port: '8000', pathname: '/media/**' },
     ],
   },
+  
   eslint: {
     ignoreDuringBuilds: true, // Remove this once ESLint issues are fixed
   },
+  
   trailingSlash: true, // Optional, depending on your backend
   
-  // Experimental features (if using app directory)
+  // ✅ Add explicit environment variables for better session handling
+  env: {
+    NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NODE_ENV: process.env.NODE_ENV,
+  },
+  
+  // ✅ Add logging for debugging API requests
+  logging: {
+    fetches: {
+      fullUrl: true,
+    },
+  },
+  
+  // ✅ Add headers for better CORS and session handling
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Allow-Origin', value: process.env.NEXTAUTH_URL || 'https://pmcs.site' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT' },
+          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization' },
+        ],
+      },
+    ]
+  },
+  
+  // ✅ Experimental features for app directory
   experimental: {
+    // Enable server actions if needed
+    serverActions: true,
     // Enable if you're using the app directory structure
     // appDir: true,
+  },
+  
+  // ✅ Add rewrites for internal API calls to avoid SSL issues
+  async rewrites() {
+    return [
+      {
+        source: '/internal-api/:path*',
+        destination: 'http://django-backend:8000/:path*',
+      },
+    ];
   },
 };
 
