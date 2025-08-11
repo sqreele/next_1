@@ -3,32 +3,28 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/lib/auth';
 
 export async function GET(request: NextRequest) {
+  console.log('🧪 Simple debug starting...');
+  
   try {
-    console.log('🧪 Testing session retrieval...');
-    
     const session = await getServerSession(authOptions);
     
-    const result = {
-      success: true,
+    return NextResponse.json({
+      timestamp: new Date().toISOString(),
       hasSession: !!session,
       hasUser: !!session?.user,
       hasAccessToken: !!session?.user?.accessToken,
       userId: session?.user?.id,
       username: session?.user?.username,
-      sessionKeys: session ? Object.keys(session) : [],
-      userKeys: session?.user ? Object.keys(session.user) : [],
-      error: session?.error,
       tokenLength: session?.user?.accessToken?.length,
-      timestamp: new Date().toISOString()
-    };
-
-    console.log('🧪 Session test result:', result);
-    
-    return NextResponse.json(result);
+      sessionError: session?.error,
+      environment: {
+        hasSecret: !!process.env.NEXTAUTH_SECRET,
+        nextAuthUrl: process.env.NEXTAUTH_URL,
+        nodeEnv: process.env.NODE_ENV
+      }
+    });
   } catch (error) {
-    console.error('🧪 Session test error:', error);
     return NextResponse.json({
-      success: false,
       error: (error as Error).message,
       timestamp: new Date().toISOString()
     }, { status: 500 });
