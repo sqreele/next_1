@@ -523,7 +523,7 @@ const PDFMaintenanceGenerator: React.FC<PDFMaintenanceGeneratorProps> = ({
           .font-semibold { font-weight: 600; }
           .font-bold { font-weight: bold; }
           .text-sm { font-size: 14px; }
-          .text-lg { font-size: 18px; }
+          .text-lg { font size: 18px; }
           .text-xl { font-size: 20px; }
           .text-2xl { font-size: 24px; }
           .text-3xl { font-size: 30px; }
@@ -662,7 +662,7 @@ const PDFMaintenanceGenerator: React.FC<PDFMaintenanceGeneratorProps> = ({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Override Frequency Filter</label>
+            <label className="block text sm font-medium text-gray-700 mb-2">Override Frequency Filter</label>
             <select
               value={filterFrequency}
               onChange={(e) => setFilterFrequency(e.target.value)}
@@ -1037,8 +1037,7 @@ const PDFMaintenanceGenerator: React.FC<PDFMaintenanceGeneratorProps> = ({
        <p className="text-gray-600">
          {maintenanceData.length === 0 
            ? "No maintenance data is available. Please ensure maintenance records are loaded."
-           : "Try adjusting your filters to see more results."
-         }
+           : "Try adjusting your filters to see more results."}
        </p>
      </div>
    )}
