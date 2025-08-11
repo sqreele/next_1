@@ -84,11 +84,18 @@ export const authOptions: NextAuthOptions = {
             headers: { Authorization: `Bearer ${tokenData.access}`, "Content-Type": "application/json" },
           });
 
+          console.log("🔐 Profile API response status:", profileResponse.status);
+
           if (profileResponse.ok) {
             profileData = await profileResponse.json();
-            console.log("🔐 Profile data fetched successfully");
+            console.log("🔐 Profile data fetched:", {
+              hasProperties: !!profileData.properties,
+              propertiesLength: profileData.properties?.length || 0,
+              properties: profileData.properties
+            });
           } else {
-            console.error(`🔐 Profile fetch failed: ${profileResponse.status}`);
+            const errorText = await profileResponse.text();
+            console.error(`🔐 Profile fetch failed: ${profileResponse.status} - ${errorText}`);
           }
 
           /** 🔹 Step 5: Create or update user in Prisma */
@@ -118,6 +125,7 @@ export const authOptions: NextAuthOptions = {
           let normalizedProperties: Property[] = [];
           
           if (profileData.properties && profileData.properties.length > 0) {
+            console.log("🔐 Using API properties:", profileData.properties);
             normalizedProperties = profileData.properties.map((prop: any) => ({
               id: String(prop.id),
               property_id: String(prop.property_id || prop.id),
@@ -127,15 +135,20 @@ export const authOptions: NextAuthOptions = {
               users: prop.users || [],
             }));
           } else {
+            console.log("🔐 No API properties, trying Prisma...");
             try {
               normalizedProperties = await getUserProperties(userId);
+              console.log("🔐 Prisma properties found:", normalizedProperties.length);
             } catch (error) {
-              console.error("🔐 Failed to get properties:", getErrorMessage(error));
+              console.error("🔐 Failed to get properties from Prisma:", getErrorMessage(error));
               normalizedProperties = [];
             }
           }
 
-          console.log("🔐 Properties normalized:", normalizedProperties.length);
+          console.log("🔐 Properties normalized:", {
+            count: normalizedProperties.length,
+            properties: normalizedProperties.map(p => ({ id: p.property_id, name: p.name }))
+          });
 
           /** 🔹 Step 7: Construct user profile */
           const userProfile: UserProfile = {
@@ -160,7 +173,8 @@ export const authOptions: NextAuthOptions = {
             userId: returnUser.id,
             username: returnUser.username,
             hasAccessToken: !!returnUser.accessToken,
-            propertiesCount: returnUser.properties.length
+            propertiesCount: returnUser.properties.length,
+            propertiesData: returnUser.properties.map(p => ({ id: p.property_id, name: p.name }))
           });
 
           return returnUser;
@@ -184,6 +198,8 @@ export const authOptions: NextAuthOptions = {
       // Initial sign in
       if (user) {
         console.log("🔐 Initial sign in - setting token data");
+        console.log("🔐 User properties being stored:", user.properties?.length || 0);
+        
         const newToken = {
           ...token,
           id: user.id,
@@ -191,7 +207,7 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           profile_image: user.profile_image,
           positions: user.positions,
-          properties: Array.isArray(user.properties) ? user.properties : [],
+          properties: Array.isArray(user.properties) ? user.properties : [], // ✅ Ensure this is always an array
           created_at: user.created_at,
           accessToken: user.accessToken,
           refreshToken: user.refreshToken,
@@ -201,10 +217,18 @@ export const authOptions: NextAuthOptions = {
         console.log("🔐 New token created", {
           hasAccessToken: !!newToken.accessToken,
           tokenLength: newToken.accessToken?.length,
+          propertiesCount: newToken.properties.length, // ✅ Log properties count
+          propertiesData: newToken.properties.map((p: any) => ({ id: p.property_id, name: p.name })),
           expiresAt: new Date(newToken.accessTokenExpires as number).toISOString()
         });
         
         return newToken;
+      }
+
+      // ✅ ADD: Ensure properties are preserved during token refresh
+      if (!token.properties || !Array.isArray(token.properties)) {
+        console.log("🔐 Token missing properties array, initializing as empty");
+        token.properties = [];
       }
 
       // Check if token exists and has required properties
@@ -226,11 +250,12 @@ export const authOptions: NextAuthOptions = {
         now: new Date(now).toISOString(),
         expiresAt: new Date(expiresAt).toISOString(),
         timeUntilExpiry: Math.round(timeUntilExpiry / 1000 / 60) + " minutes",
-        isExpired: now >= expiresAt
+        isExpired: now >= expiresAt,
+        propertiesCount: (token.properties as any[])?.length || 0 // ✅ Log properties during refresh
       });
 
       if (now < expiresAt) {
-        console.log("🔐 Token still valid");
+        console.log("🔐 Token still valid, preserving properties:", (token.properties as any[])?.length || 0);
         return token;
       }
 
@@ -244,12 +269,14 @@ export const authOptions: NextAuthOptions = {
           return { ...token, error: ERROR_TYPES.REFRESH_TOKEN_ERROR };
         }
         
-        console.log("🔐 Token refreshed successfully");
+        console.log("🔐 Token refreshed successfully, preserving properties:", (token.properties as any[])?.length || 0);
         return {
           ...token,
           accessToken: refreshedToken.accessToken,
           refreshToken: refreshedToken.refreshToken || token.refreshToken,
           accessTokenExpires: refreshedToken.accessTokenExpires,
+          // ✅ Preserve properties during token refresh
+          properties: token.properties,
           error: undefined // Clear any previous errors
         };
       } catch (error) {
@@ -263,7 +290,8 @@ export const authOptions: NextAuthOptions = {
         hasToken: !!token,
         tokenKeys: token ? Object.keys(token) : [],
         hasAccessToken: !!(token as any)?.accessToken,
-        tokenError: (token as any)?.error
+        tokenError: (token as any)?.error,
+        propertiesInToken: (token as any)?.properties?.length || 0 // ✅ Log properties count from token
       });
 
       // If token has an error, return it to trigger re-authentication
@@ -291,13 +319,24 @@ export const authOptions: NextAuthOptions = {
       }
 
       try {
+        // ✅ Ensure properties is always an array
+        const properties = (token as any).properties;
+        const normalizedProperties = Array.isArray(properties) ? properties : [];
+
+        console.log("🔐 Processing session properties:", {
+          rawProperties: properties,
+          isArray: Array.isArray(properties),
+          normalizedCount: normalizedProperties.length,
+          normalizedData: normalizedProperties.map((p: any) => ({ id: p?.property_id, name: p?.name }))
+        });
+
         session.user = {
           id: (token as any).id as string,
           username: (token as any).username as string,
           email: (token as any).email as string | null,
           profile_image: (token as any).profile_image as string | null,
           positions: (token as any).positions as string,
-          properties: ((token as any).properties as Property[]) || [],
+          properties: normalizedProperties, // ✅ Use normalized properties
           created_at: (token as any).created_at as string,
           accessToken: (token as any).accessToken as string,
           refreshToken: (token as any).refreshToken as string,
@@ -308,7 +347,8 @@ export const authOptions: NextAuthOptions = {
           username: session.user.username,
           hasAccessToken: !!session.user.accessToken,
           tokenLength: session.user.accessToken?.length,
-          propertiesCount: session.user.properties.length
+          propertiesCount: session.user.properties.length, // ✅ This should now show the correct count
+          propertiesData: session.user.properties.map(p => ({ id: p.property_id, name: p.name })) // ✅ Log actual properties
         });
 
         return session;
@@ -325,7 +365,7 @@ export const authOptions: NextAuthOptions = {
 
   events: {
     async signIn({ user }) {
-      console.log(`🔐 User ${user.id} signed in successfully`);
+      console.log(`🔐 User ${user.id} signed in successfully with ${user.properties?.length || 0} properties`);
     },
     async session({ session, token }) {
       if ((token as any).error === ERROR_TYPES.REFRESH_TOKEN_ERROR) {
