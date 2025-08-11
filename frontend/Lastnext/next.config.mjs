@@ -71,6 +71,11 @@ const nextConfig = {
   async rewrites() {
     const privateApi = process.env.NEXT_PRIVATE_API_URL || 'http://django-backend:8000';
     return [
+      // Do NOT proxy NextAuth endpoints; let Next.js handle them
+      {
+        source: '/api/auth/:path*',
+        destination: '/api/auth/:path*',
+      },
       // Pass-through for already versioned API calls
       {
         source: '/api/v1/:path*',
