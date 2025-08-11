@@ -129,8 +129,8 @@ RUN echo "=== BUILD OUTPUT DEBUG ===" && \
     fi && \
     echo "=== END DEBUG ==="
 
-# Clean up dev dependencies and build artifacts to reduce image size
-RUN npm ci --omit=dev --legacy-peer-deps && \
+# Clean up dev dependencies without reinstalling to keep generated Prisma client
+RUN npm prune --production && \
     npm cache clean --force && \
     rm -rf /tmp/.npm /root/.npm
 
@@ -160,11 +160,16 @@ RUN mkdir -p /app/.next/cache && \
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:3000/api/health || exit 1
 
+# Ensure Prisma CLI is available at runtime for generate/db push
+RUN npm install -g prisma@6.13.0
+
 # Switch to non-root user for security
 USER nextjs
 
 # Expose port
 EXPOSE 3000
 
-# Start the application directly with Next.js
-CMD ["npx", "next", "start"]
+# Use entrypoint that ensures Prisma client is generated and DB is ready
+COPY app/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
