@@ -22,7 +22,7 @@ def health_check(request):
 # Create a router and register viewsets
 router = DefaultRouter()
 router.register(r'users', UserViewSet)
-router.register(r'rooms', RoomViewSet)
+router.register(r'rooms', views.RoomViewSet, basename='room')
 router.register(r'topics', TopicViewSet)
 router.register(r'jobs', JobViewSet)
 router.register(r'properties', PropertyViewSet)
