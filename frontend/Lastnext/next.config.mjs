@@ -25,21 +25,18 @@ const nextConfig = {
   
   trailingSlash: true, // Optional, depending on your backend
   
-  // ✅ Remove NODE_ENV - it's automatically managed by Next.js
   env: {
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
   },
   
-  // ✅ Add logging for debugging API requests
   logging: {
     fetches: {
       fullUrl: true,
     },
   },
   
-  // ✅ Add headers for better CORS and session handling
   async headers() {
     return [
       {
@@ -51,16 +48,14 @@ const nextConfig = {
           { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, Authorization' },
         ],
       },
-    ]
+    ];
   },
   
-  // ✅ Experimental features for app directory
   experimental: {
-    // Enable server actions if needed
-    serverActions: true,
+    // ✅ Fixed: serverActions must be an object in Next.js 15+
+    serverActions: {},
   },
   
-  // ✅ Add rewrites for internal API calls to avoid SSL issues
   async rewrites() {
     return [
       {
