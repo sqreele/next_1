@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
     
     const session = await getServerSession(authOptions);
     
-    return NextResponse.json({
+    const result = {
       success: true,
       hasSession: !!session,
       hasUser: !!session?.user,
@@ -18,14 +18,19 @@ export async function GET(request: NextRequest) {
       sessionKeys: session ? Object.keys(session) : [],
       userKeys: session?.user ? Object.keys(session.user) : [],
       error: session?.error,
-      // Only include token length for security
-      tokenLength: session?.user?.accessToken?.length
-    });
+      tokenLength: session?.user?.accessToken?.length,
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('🧪 Session test result:', result);
+    
+    return NextResponse.json(result);
   } catch (error) {
-    console.error('Session test error:', error);
+    console.error('🧪 Session test error:', error);
     return NextResponse.json({
       success: false,
-      error: error.message
+      error: (error as Error).message,
+      timestamp: new Date().toISOString()
     }, { status: 500 });
   }
 }
