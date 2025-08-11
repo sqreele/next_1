@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
           hasSession: !!session,
           hasUser: !!session?.user,
           sessionKeys: session ? Object.keys(session) : [],
-          userKeys: session?.user ? Object.keys(session.user) : []
+          userKeys: session?.user ? Object.keys(session.user) : [],
+          sessionError: session?.error
         }
       }, { status: 401 });
     }
