@@ -1,4 +1,4 @@
-// lib/auth.ts (or wherever your auth config is)
+// app/lib/auth.ts
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import jwt, { JwtPayload } from "jsonwebtoken";
@@ -20,10 +20,13 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) {
+          console.error("🔐 Missing credentials");
           throw new Error("Missing credentials.");
         }
 
         try {
+          console.log("🔐 Starting authentication for:", credentials.username);
+
           /** 🔹 Step 1: Get authentication tokens from API */
           const tokenResponse = await fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.token}`, {
             method: "POST",
@@ -31,13 +34,22 @@ export const authOptions: NextAuthOptions = {
             body: JSON.stringify(credentials),
           });
 
+          console.log("🔐 Token response status:", tokenResponse.status);
+
           if (!tokenResponse.ok) {
             const errorText = await tokenResponse.text();
-            console.error(`Token fetch failed: ${tokenResponse.status} - ${errorText}`);
+            console.error(`🔐 Token fetch failed: ${tokenResponse.status} - ${errorText}`);
             throw new Error("Invalid credentials.");
           }
 
           const tokenData = await tokenResponse.json();
+          console.log("🔐 Token data received:", {
+            hasAccess: !!tokenData.access,
+            hasRefresh: !!tokenData.refresh,
+            accessLength: tokenData.access?.length,
+            refreshLength: tokenData.refresh?.length
+          });
+
           if (!tokenData.access || !tokenData.refresh) {
             throw new Error("Token response missing access or refresh token.");
           }
@@ -55,6 +67,11 @@ export const authOptions: NextAuthOptions = {
           const userId = String(decoded.user_id);
           const accessTokenExpires = getTokenExpiryTime(tokenData.access) || Date.now() + 60 * 60 * 1000;
 
+          console.log("🔐 Token decoded:", {
+            userId,
+            expiresAt: new Date(accessTokenExpires).toISOString()
+          });
+
           /** 🔹 Step 3: Fetch user from Prisma database */
           let user = await prisma.user.findUnique({
             where: { id: userId },
@@ -68,8 +85,9 @@ export const authOptions: NextAuthOptions = {
 
           if (profileResponse.ok) {
             profileData = await profileResponse.json();
+            console.log("🔐 Profile data fetched successfully");
           } else {
-            console.error(`Profile fetch failed: ${profileResponse.status}`);
+            console.error(`🔐 Profile fetch failed: ${profileResponse.status}`);
           }
 
           /** 🔹 Step 5: Create or update user in Prisma */
@@ -92,6 +110,7 @@ export const authOptions: NextAuthOptions = {
                 created_at: profileData.created_at ? new Date(profileData.created_at) : new Date(),
               },
             });
+            console.log("🔐 User created/updated in database");
           }
 
           /** 🔹 Step 6: Normalize properties */
@@ -110,10 +129,12 @@ export const authOptions: NextAuthOptions = {
             try {
               normalizedProperties = await getUserProperties(userId);
             } catch (error) {
-              console.error("Failed to get properties:", error);
+              console.error("🔐 Failed to get properties:", error);
               normalizedProperties = [];
             }
           }
+
+          console.log("🔐 Properties normalized:", normalizedProperties.length);
 
           /** 🔹 Step 7: Construct user profile */
           const userProfile: UserProfile = {
@@ -127,14 +148,23 @@ export const authOptions: NextAuthOptions = {
           };
 
           /** 🔹 Step 8: Return the user object with token expiry time */
-          return {
+          const returnUser = {
             ...userProfile,
             accessToken: tokenData.access,
             refreshToken: tokenData.refresh,
             accessTokenExpires: accessTokenExpires,
           };
+
+          console.log("🔐 User authentication successful:", {
+            userId: returnUser.id,
+            username: returnUser.username,
+            hasAccessToken: !!returnUser.accessToken,
+            propertiesCount: returnUser.properties.length
+          });
+
+          return returnUser;
         } catch (error) {
-          console.error("Authorization Error:", error);
+          console.error("🔐 Authorization Error:", error);
           throw new Error("Unable to log in. Please check your credentials.");
         }
       },
@@ -143,90 +173,179 @@ export const authOptions: NextAuthOptions = {
 
   callbacks: {
     async jwt({ token, user, account }) {
+      console.log("🔐 JWT callback", {
+        hasUser: !!user,
+        hasToken: !!token,
+        userKeys: user ? Object.keys(user) : [],
+        tokenKeys: token ? Object.keys(token) : []
+      });
+
       // Initial sign in
       if (user) {
-        token.id = user.id;
-        token.username = user.username;
-        token.email = user.email;
-        token.profile_image = user.profile_image;
-        token.positions = user.positions;
-        token.properties = Array.isArray(user.properties) ? user.properties : [];
-        token.created_at = user.created_at;
-        token.accessToken = user.accessToken;
-        token.refreshToken = user.refreshToken;
-        token.accessTokenExpires = user.accessTokenExpires;
+        console.log("🔐 Initial sign in - setting token data");
+        const newToken = {
+          ...token,
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          profile_image: user.profile_image,
+          positions: user.positions,
+          properties: Array.isArray(user.properties) ? user.properties : [],
+          created_at: user.created_at,
+          accessToken: user.accessToken,
+          refreshToken: user.refreshToken,
+          accessTokenExpires: user.accessTokenExpires,
+        };
+        
+        console.log("🔐 New token created", {
+          hasAccessToken: !!newToken.accessToken,
+          tokenLength: newToken.accessToken?.length,
+          expiresAt: new Date(newToken.accessTokenExpires as number).toISOString()
+        });
+        
+        return newToken;
+      }
+
+      // Check if token exists and has required properties
+      if (!token?.accessToken || !token?.accessTokenExpires) {
+        console.error("🔐 Token missing required properties", {
+          hasAccessToken: !!token?.accessToken,
+          hasExpires: !!token?.accessTokenExpires,
+          tokenKeys: token ? Object.keys(token) : []
+        });
+        return { ...token, error: ERROR_TYPES.REFRESH_TOKEN_ERROR };
       }
 
       // Return previous token if the access token has not expired yet
-      if (Date.now() < (token.accessTokenExpires as number)) {
+      const now = Date.now();
+      const expiresAt = token.accessTokenExpires as number;
+      const timeUntilExpiry = expiresAt - now;
+      
+      console.log("🔐 Token expiry check", {
+        now: new Date(now).toISOString(),
+        expiresAt: new Date(expiresAt).toISOString(),
+        timeUntilExpiry: Math.round(timeUntilExpiry / 1000 / 60) + " minutes",
+        isExpired: now >= expiresAt
+      });
+
+      if (now < expiresAt) {
+        console.log("🔐 Token still valid");
         return token;
       }
 
       // Access token has expired, try to update it
+      console.log("🔐 Token expired, attempting refresh...");
       try {
-        console.log("Access token has expired. Attempting refresh...");
         const refreshedToken = await refreshAccessToken(token.refreshToken as string);
         
         if (refreshedToken.error) {
-          console.error("Error refreshing token:", refreshedToken.error);
+          console.error("🔐 Token refresh failed:", refreshedToken.error);
           return { ...token, error: ERROR_TYPES.REFRESH_TOKEN_ERROR };
         }
         
-        console.log("Token refreshed successfully");
+        console.log("🔐 Token refreshed successfully");
         return {
           ...token,
           accessToken: refreshedToken.accessToken,
           refreshToken: refreshedToken.refreshToken || token.refreshToken,
           accessTokenExpires: refreshedToken.accessTokenExpires,
+          error: undefined // Clear any previous errors
         };
       } catch (error) {
-        console.error("Token refresh error:", error);
+        console.error("🔐 Token refresh error:", error);
         return { ...token, error: ERROR_TYPES.REFRESH_TOKEN_ERROR };
       }
     },
 
     async session({ session, token }) {
-      session.user = {
-        id: token.id as string,
-        username: token.username as string,
-        email: token.email as string | null,
-        profile_image: token.profile_image as string | null,
-        positions: token.positions as string,
-        properties: token.properties as Property[],
-        created_at: token.created_at as string,
-        accessToken: token.accessToken as string,
-        refreshToken: token.refreshToken as string,
-      };
-      
-      // Pass error to the session if token refresh failed
-      if (token.error) {
-        session.error = token.error as string;
+      console.log("🔐 Session callback triggered", {
+        hasToken: !!token,
+        tokenKeys: token ? Object.keys(token) : [],
+        hasAccessToken: !!(token as any)?.accessToken,
+        tokenError: (token as any)?.error
+      });
+
+      // If token has an error, return it to trigger re-authentication
+      if ((token as any)?.error) {
+        console.error("🔐 Token error in session:", (token as any).error);
+        return {
+          ...session,
+          error: (token as any).error as string,
+          user: undefined // Clear user to force re-auth
+        };
       }
-      
-      return session;
+
+      // Make sure we have required token data
+      if (!(token as any)?.accessToken || !(token as any)?.id) {
+        console.error("🔐 Missing required token data:", {
+          hasAccessToken: !!(token as any)?.accessToken,
+          hasId: !!(token as any)?.id,
+          tokenKeys: token ? Object.keys(token) : []
+        });
+        return {
+          ...session,
+          error: "incomplete_token",
+          user: undefined
+        };
+      }
+
+      try {
+        session.user = {
+          id: (token as any).id as string,
+          username: (token as any).username as string,
+          email: (token as any).email as string | null,
+          profile_image: (token as any).profile_image as string | null,
+          positions: (token as any).positions as string,
+          properties: ((token as any).properties as Property[]) || [],
+          created_at: (token as any).created_at as string,
+          accessToken: (token as any).accessToken as string,
+          refreshToken: (token as any).refreshToken as string,
+        };
+
+        console.log("🔐 Session created successfully", {
+          userId: session.user.id,
+          username: session.user.username,
+          hasAccessToken: !!session.user.accessToken,
+          tokenLength: session.user.accessToken?.length,
+          propertiesCount: session.user.properties.length
+        });
+
+        return session;
+      } catch (error) {
+        console.error("🔐 Error creating session:", error);
+        return {
+          ...session,
+          error: "session_creation_error",
+          user: undefined
+        };
+      }
     },
   },
 
   events: {
     async signIn({ user }) {
-      console.log(`User ${user.id} signed in successfully`);
+      console.log(`🔐 User ${user.id} signed in successfully`);
     },
     async session({ session, token }) {
-      if (token.error === ERROR_TYPES.REFRESH_TOKEN_ERROR) {
-        console.error(`Session error: Failed to refresh access token`);
+      if ((token as any).error === ERROR_TYPES.REFRESH_TOKEN_ERROR) {
+        console.error(`🔐 Session error: Failed to refresh access token`);
       }
     },
   },
 
-  pages: { signIn: "/auth/signin" },
+  pages: { 
+    signIn: "/auth/signin",
+    error: "/auth/error",
+  },
+  
   session: {
     strategy: "jwt",
     maxAge: AUTH_CONFIG.sessionMaxAge,
     updateAge: AUTH_CONFIG.sessionUpdateAge,
   },
+  
   secret: process.env.NEXTAUTH_SECRET,
-  debug: process.env.NODE_ENV !== "production",
+  debug: true, // Enable debug temporarily
 };
+
 export default authOptions;
-// REMOVED: Don't export NextAuth(authOptions) as default
-// export default NextAuth(authOptions);
