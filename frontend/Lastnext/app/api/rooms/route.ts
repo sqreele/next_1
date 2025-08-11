@@ -1,61 +1,44 @@
+// app/api/rooms/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/lib/auth';
-import { API_CONFIG } from '@/app/lib/config';
+import { API_CONFIG, DEBUG_CONFIG } from '@/app/lib/config';
 import { getErrorMessage } from '@/app/lib/utils/error-utils';
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 Rooms API - Request started');
-    console.log('🔍 Request URL:', request.url);
-    console.log('🔍 Request headers:', {
-      cookie: request.headers.get('cookie')?.substring(0, 100) + '...',
-      authorization: request.headers.get('authorization'),
-      userAgent: request.headers.get('user-agent'),
-    });
+    if (DEBUG_CONFIG.logApiCalls) {
+      console.log('🔍 Rooms API - Request started');
+      console.log('🔍 Request URL:', request.url);
+      console.log('🔍 API_CONFIG.baseUrl:', API_CONFIG.baseUrl);
+    }
 
-    // ✅ CRITICAL: Pass both request and response objects for App Router
+    // ✅ Get session with proper error handling
     const session = await getServerSession(authOptions);
     
-    console.log('🔍 Rooms API Debug:', {
-      hasSession: !!session,
-      hasUser: !!session?.user,
-      hasAccessToken: !!session?.user?.accessToken,
-      userId: session?.user?.id,
-      username: session?.user?.username,
-      accessTokenLength: session?.user?.accessToken?.length,
-      sessionError: session?.error,
-      fullSessionKeys: session ? Object.keys(session) : [],
-      userKeys: session?.user ? Object.keys(session.user) : []
-    });
-
-    // If no session, try to debug why
-    if (!session) {
-      console.log('❌ No session found in rooms API');
-      console.log('🔍 Cookies received:', request.headers.get('cookie'));
-      
-      return NextResponse.json({ 
-        error: 'Unauthorized - No session found',
-        debug: {
-          hasCookies: !!request.headers.get('cookie'),
-          requestUrl: request.url,
-          timestamp: new Date().toISOString()
-        }
-      }, { status: 401 });
+    if (DEBUG_CONFIG.logSessions) {
+      console.log('🔍 Rooms API Session Debug:', {
+        hasSession: !!session,
+        hasUser: !!session?.user,
+        hasAccessToken: !!session?.user?.accessToken,
+        userId: session?.user?.id,
+        username: session?.user?.username,
+        accessTokenLength: session?.user?.accessToken?.length,
+        sessionError: session?.error,
+      });
     }
-    
+
     if (!session?.user?.accessToken) {
-      console.log('❌ No access token in session');
-      
+      console.log('❌ No access token in rooms API session');
       return NextResponse.json({ 
-        error: 'Unauthorized - No access token',
-        debug: {
+        error: 'Unauthorized',
+        debug: DEBUG_CONFIG.logSessions ? {
           hasSession: !!session,
           hasUser: !!session?.user,
           sessionKeys: session ? Object.keys(session) : [],
           userKeys: session?.user ? Object.keys(session.user) : [],
           sessionError: session?.error
-        }
+        } : undefined
       }, { status: 401 });
     }
 
@@ -66,45 +49,59 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Property ID is required' }, { status: 400 });
     }
 
-    // ✅ Use internal HTTP endpoint to avoid SSL issues
-    const apiUrl = `http://django-backend:8000/api/rooms/?property=${propertyId}`;
-    console.log('🔍 Calling Django API:', apiUrl);
-    console.log('🔍 With token length:', session.user.accessToken.length);
+    // ✅ Use the config for API URL construction
+    const apiUrl = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.rooms}?property=${propertyId}`;
+    
+    if (DEBUG_CONFIG.logApiCalls) {
+      console.log('🔍 Calling Django API:', apiUrl);
+      console.log('🔍 With token length:', session.user.accessToken.length);
+    }
 
     // Fetch rooms from the external API
     const response = await fetch(apiUrl, {
       headers: {
         'Authorization': `Bearer ${session.user.accessToken}`,
         'Content-Type': 'application/json',
+        'User-Agent': 'NextJS-Server/1.0',
       },
-      // ✅ Add timeout and error handling
-      signal: AbortSignal.timeout(10000), // 10 second timeout
+      // Add timeout
+      signal: AbortSignal.timeout(15000), // 15 second timeout
     });
 
-    console.log('🔍 Django API response:', response.status, response.statusText);
+    if (DEBUG_CONFIG.logApiCalls) {
+      console.log('🔍 Django API response:', response.status, response.statusText);
+    }
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Failed to fetch rooms:', response.status, response.statusText, errorText);
+      console.error('❌ Failed to fetch rooms:', response.status, response.statusText, errorText);
       return NextResponse.json(
-        { error: 'Failed to fetch rooms', details: errorText, status: response.status }, 
+        { 
+          error: 'Failed to fetch rooms', 
+          details: errorText, 
+          status: response.status,
+          apiUrl: DEBUG_CONFIG.logApiCalls ? apiUrl : undefined
+        }, 
         { status: response.status }
       );
     }
 
     const rooms = await response.json();
-    console.log('🔍 Rooms fetched successfully:', Array.isArray(rooms) ? rooms.length : 'Not an array');
+    
+    if (DEBUG_CONFIG.logApiCalls) {
+      console.log('✅ Rooms fetched successfully:', Array.isArray(rooms) ? rooms.length : 'Not an array');
+    }
+    
     return NextResponse.json(rooms);
 
   } catch (error) {
-    console.error('❌ Error fetching rooms:', error);
+    console.error('❌ Error in rooms API:', error);
     
-    // Enhanced error logging
     if (error instanceof Error) {
       console.error('Error details:', {
         name: error.name,
         message: error.message,
-        stack: error.stack
+        stack: DEBUG_CONFIG.logApiCalls ? error.stack : undefined
       });
     }
     
