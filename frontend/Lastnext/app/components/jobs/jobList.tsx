@@ -31,6 +31,24 @@ export default function JobList({ jobs, filter, properties, selectedRoom, onRoom
   const [customDateRange, setCustomDateRange] = useState<{ start?: Date, end?: Date }>({});
   const { selectedProperty } = useProperty();
 
+  // Build a set of identifiers that represent the currently selected property
+  // This ensures we match both the human-readable property code and the numeric PK
+  const selectedPropertyIdentifiers = (() => {
+    const identifiers = new Set<string>();
+    if (selectedProperty) identifiers.add(String(selectedProperty));
+
+    const matched = properties?.find(
+      (p) => String(p.property_id) === String(selectedProperty) || String(p.id) === String(selectedProperty)
+    );
+
+    if (matched) {
+      if (matched.property_id) identifiers.add(String(matched.property_id));
+      if (matched.id) identifiers.add(String(matched.id));
+    }
+
+    return identifiers;
+  })();
+
   // Debug logging
   console.log('🔍 JobList Debug:', {
     jobsCount: jobs?.length || 0,
@@ -119,28 +137,39 @@ export default function JobList({ jobs, filter, properties, selectedRoom, onRoom
       profileImageProperties: job.profile_image?.properties,
       hasRooms: !!job.rooms,
       roomProperties: job.rooms?.map(r => r.properties),
-      directProperties: job.properties
+      directProperties: job.properties,
+      propertyIdentifiers: Array.from(selectedPropertyIdentifiers)
     });
+
+    const matchesSelectedProperty = (value: any): boolean => {
+      if (selectedPropertyIdentifiers.size === 0) return true; // no property selected -> allow
+
+      if (value == null) return false;
+
+      if (typeof value === 'string' || typeof value === 'number') {
+        return selectedPropertyIdentifiers.has(String(value));
+      }
+
+      if (typeof value === 'object') {
+        const byPropertyCode = 'property_id' in value ? selectedPropertyIdentifiers.has(String((value as any).property_id)) : false;
+        const byId = 'id' in value ? selectedPropertyIdentifiers.has(String((value as any).id)) : false;
+        return byPropertyCode || byId;
+      }
+
+      return false;
+    };
 
     // More permissive property matching - if no selectedProperty, show all jobs
     // If selectedProperty is set, try multiple ways to match
-    let matchesProperty = !selectedProperty || 
+    let matchesProperty = selectedPropertyIdentifiers.size === 0 || 
       // Check profile_image properties
-      job.profile_image?.properties?.some(p => String(p.property_id) === selectedProperty) ||
+      job.profile_image?.properties?.some(p => matchesSelectedProperty(p)) ||
       // Check room properties
-      job.rooms?.some(r => r.properties?.some(prop => String(prop) === selectedProperty)) ||
+      job.rooms?.some(r => r.properties?.some(prop => matchesSelectedProperty(prop))) ||
       // Check direct properties
-      job.properties?.some(prop => {
-        if (typeof prop === 'string' || typeof prop === 'number') {
-          return String(prop) === selectedProperty;
-        }
-        if (prop && typeof prop === 'object') {
-          return String(prop.property_id || prop.id) === selectedProperty;
-        }
-        return false;
-      }) ||
+      job.properties?.some(prop => matchesSelectedProperty(prop)) ||
       // Check property_id field
-      String(job.property_id) === selectedProperty;
+      (job.property_id != null && matchesSelectedProperty(job.property_id));
     
     // Temporary override for debugging - show all jobs if we're in development
     if (process.env.NODE_ENV === 'development' && jobs.length > 0) {
