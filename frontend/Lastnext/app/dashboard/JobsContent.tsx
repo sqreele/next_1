@@ -45,64 +45,29 @@ export default function JobsContent({ jobs, properties, selectedRoom, onRoomFilt
 
   const filteredJobs = useMemo(() => {
     if (!Array.isArray(jobs)) return [];
-    
-    let filtered = jobs as ExtendedJob[]; // Cast to the extended type
-    
-    // Property filtering
-    if (selectedProperty) {
-      filtered = filtered.filter(job => 
-        job.profile_image?.properties?.some(
-          prop => String(prop.property_id) === selectedProperty
-        )
-      );
-    }
-    
-    // Room filtering
-    if (selectedRoom) {
-      filtered = filtered.filter(job => {
-        if (!job.rooms || !Array.isArray(job.rooms) || job.rooms.length === 0) {
-          return false;
-        }
-        
-        return job.rooms.some((room: any) => {
-          if (typeof room === "string" || typeof room === "number") {
-            return String(room) === selectedRoom;
-          }
-          if (room && typeof room === "object" && "room_id" in room) {
-            return String(room.room_id) === selectedRoom;
-          }
-          if (room && typeof room === "object" && "id" in room) {
-            return String(room.id) === selectedRoom;
-          }
-          return false;
-        });
-      });
-    }
-    
-    switch (currentTab) {
-      case 'pending':
-        return filtered.filter(job => job.status === 'pending');
-      case 'waiting_sparepart':
-        return filtered.filter(job => job.status === 'waiting_sparepart');
-      case 'completed':
-        return filtered.filter(job => job.status === 'completed');
-      case 'cancelled':
-        return filtered.filter(job => job.status === 'cancelled');
-      case 'defect':
-        return filtered.filter(job => job.is_defective);
-      case 'preventive_maintenance':
-        // Updated property name with standard naming convention and added null check
-        return filtered.filter(job => job.is_preventive_maintenance === true);
-      default:
-        return filtered;
-    }
-  }, [jobs, currentTab, selectedProperty, selectedRoom]);
 
-  const sortedJobs = useMemo(() => {
-    return [...filteredJobs].sort((a, b) => 
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-  }, [filteredJobs]);
+    // Only apply room filtering here. Property/status/date sorting will be handled in JobList.
+    if (!selectedRoom) return jobs;
+
+    return jobs.filter(job => {
+      if (!job.rooms || !Array.isArray(job.rooms) || job.rooms.length === 0) {
+        return false;
+      }
+
+      return job.rooms.some((room: any) => {
+        if (typeof room === "string" || typeof room === "number") {
+          return String(room) === selectedRoom;
+        }
+        if (room && typeof room === "object" && "room_id" in room) {
+          return String(room.room_id) === selectedRoom;
+        }
+        if (room && typeof room === "object" && "id" in room) {
+          return String(room.id) === selectedRoom;
+        }
+        return false;
+      });
+    });
+  }, [jobs, selectedRoom]);
 
   const handleTabChange = (value: string) => {
     setCurrentTab(value as TabValue);
@@ -180,7 +145,7 @@ export default function JobsContent({ jobs, properties, selectedRoom, onRoomFilt
         {tabConfig.map(({ value }) => (
           <TabsContent key={value} value={value} className="mt-0">
             <JobList 
-              jobs={sortedJobs}
+              jobs={filteredJobs}
               filter={value as TabValue} 
               properties={properties}
               selectedRoom={selectedRoom}
