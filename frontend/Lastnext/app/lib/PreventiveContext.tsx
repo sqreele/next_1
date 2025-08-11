@@ -3,6 +3,7 @@
 'use client';
 
 import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { 
   PreventiveMaintenance, 
   FrequencyType, 
@@ -465,22 +466,26 @@ export const PreventiveMaintenanceProvider: React.FC<PreventiveMaintenanceProvid
  );
 
  // Initialize data on component mount
- useEffect(() => {
-   console.log('🚀 Initializing PreventiveMaintenanceProvider');
-   
-   const initializeData = async () => {
-     await Promise.all([
-       fetchTopics(),
-       fetchStatistics(),
-       fetchMachines()
-     ]);
-     
-     // Fetch maintenance items last
-     await fetchMaintenanceItems();
-   };
+   const { status } = useSession();
 
-   initializeData();
- }, [fetchTopics, fetchStatistics, fetchMachines, fetchMaintenanceItems]);
+  useEffect(() => {
+    if (status !== 'authenticated') return;
+
+    console.log('🚀 Initializing PreventiveMaintenanceProvider');
+    
+    const initializeData = async () => {
+      await Promise.all([
+        fetchTopics(),
+        fetchStatistics(),
+        fetchMachines()
+      ]);
+      
+      // Fetch maintenance items last
+      await fetchMaintenanceItems();
+    };
+
+    initializeData();
+  }, [status, fetchTopics, fetchStatistics, fetchMachines, fetchMaintenanceItems]);
 
  // ✅ Enhanced debug effect to monitor filter changes
  useEffect(() => {

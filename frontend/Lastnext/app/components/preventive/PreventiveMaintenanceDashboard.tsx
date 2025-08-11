@@ -188,13 +188,13 @@ export default function PreventiveMaintenanceDashboard() {
         <h1 className="text-2xl font-bold text-gray-900">Preventive Maintenance Dashboard</h1>
         <div className="flex space-x-3">
           <Link 
-            href="/preventive-maintenance" 
+            href="/dashboard/preventive-maintenance" 
             className="bg-gray-100 py-2 px-4 rounded-md text-gray-700 hover:bg-gray-200"
           >
             View All Tasks
           </Link>
           <Link 
-            href="/preventive-maintenance/create" 
+            href="/dashboard/preventive-maintenance/create" 
             className="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700"
           >
             Create New
@@ -513,13 +513,13 @@ export default function PreventiveMaintenanceDashboard() {
             </ul>
             <div className="mt-4 space-x-2">
               <Link 
-                href="/preventive-maintenance/create"
+                href="/dashboard/preventive-maintenance/create"
                 className="inline-block bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
               >
                 Create New Task
               </Link>
               <Link 
-                href="/preventive-maintenance"
+                href="/dashboard/preventive-maintenance"
                 className="inline-block bg-gray-100 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-200"
               >
                 View All Tasks
@@ -534,7 +534,7 @@ export default function PreventiveMaintenanceDashboard() {
         <h2 className="text-lg font-semibold text-gray-700 mb-4">Quick Actions</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Link 
-            href="/preventive-maintenance/create"
+            href="/dashboard/preventive-maintenance/create"
             className="flex items-center p-4 border rounded-lg hover:bg-blue-50 hover:border-blue-300"
           >
             <div className="p-2 rounded-full bg-blue-100 text-blue-600 mr-3">
@@ -546,7 +546,7 @@ export default function PreventiveMaintenanceDashboard() {
           </Link>
           
           <Link 
-            href="/preventive-maintenance?status=overdue"
+            href="/dashboard/preventive-maintenance?status=overdue"
             className="flex items-center p-4 border rounded-lg hover:bg-red-50 hover:border-red-300"
           >
             <div className="p-2 rounded-full bg-red-100 text-red-600 mr-3">
@@ -558,7 +558,7 @@ export default function PreventiveMaintenanceDashboard() {
           </Link>
           
           <Link 
-            href="/preventive-maintenance?status=pending"
+            href="/dashboard/preventive-maintenance?status=pending"
             className="flex items-center p-4 border rounded-lg hover:bg-yellow-50 hover:border-yellow-300"
           >
             <div className="p-2 rounded-full bg-yellow-100 text-yellow-600 mr-3">
