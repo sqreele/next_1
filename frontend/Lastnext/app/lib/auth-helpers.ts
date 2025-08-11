@@ -1,42 +1,43 @@
-// app/lib/auth-helpers.ts
+// app/lib/auth-helpers.ts (update the refresh function)
+import { API_CONFIG, DEBUG_CONFIG } from '@/app/lib/config';
 
-import { jwtDecode } from "jwt-decode";
-import { API_CONFIG, ERROR_TYPES } from "./config";
-
-/**
- * Helper function to refresh the access token using the refresh token
- */
 export async function refreshAccessToken(refreshToken: string) {
+  if (DEBUG_CONFIG.logAuth) {
+    console.log("🔐 Starting token refresh...");
+  }
+  
   try {
-    const response = await fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.tokenRefresh}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const url = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.tokenRefresh}`;
+    
+    if (DEBUG_CONFIG.logAuth) {
+      console.log("🔐 Refresh URL:", url);
+    }
+    
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh: refreshToken }),
     });
 
     if (!response.ok) {
-      throw new Error(`Refresh token failed: ${response.status}`);
+      const errorText = await response.text();
+      console.error("🔐 Token refresh failed:", response.status, errorText);
+      return { error: "Failed to refresh token" };
     }
 
-    const refreshedTokens = await response.json();
-
-    if (!refreshedTokens.access) {
-      throw new Error('Refresh response did not contain access token');
+    const tokens = await response.json();
+    
+    if (DEBUG_CONFIG.logAuth) {
+      console.log("🔐 Token refresh successful");
     }
-
-    // Calculate expiry time from JWT
-    const decoded = jwtDecode(refreshedTokens.access);
-    const expiresAt = decoded.exp ? decoded.exp * 1000 : Date.now() + 60 * 60 * 1000; // Default 1 hour
-
+    
     return {
-      accessToken: refreshedTokens.access,
-      refreshToken: refreshedTokens.refresh || refreshToken, // Use new refresh token if provided
-      accessTokenExpires: expiresAt,
+      accessToken: tokens.access,
+      refreshToken: tokens.refresh || refreshToken,
+      accessTokenExpires: Date.now() + 60 * 60 * 1000, // 1 hour
     };
   } catch (error) {
-    console.error('Error refreshing access token:', error);
-    return {
-      error: ERROR_TYPES.REFRESH_TOKEN_ERROR,
-    };
+    console.error("🔐 Token refresh error:", error);
+    return { error: "Network error during token refresh" };
   }
 }
