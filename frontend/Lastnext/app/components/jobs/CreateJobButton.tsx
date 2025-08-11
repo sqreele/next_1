@@ -5,6 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { Formik, Form, Field } from 'formik';
 import * as Yup from 'yup';
 import axios from 'axios';
+import apiClient from '@/app/lib/api-client';
 import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
 import { Plus, ChevronDown, ChevronUp, Loader } from "lucide-react";
@@ -150,16 +151,14 @@ const CreateJobButton: React.FC<CreateJobButtonProps> = ({ propertyId, onJobCrea
     // setTopics([]);
 
     try {
-      const headers = { Authorization: `Bearer ${session?.user?.accessToken}` };
-      // Fetch rooms *for the specific property* and all topics
+      // Use Next.js API routes which proxy to Django and handle auth via session
       const [roomsResponse, topicsResponse] = await Promise.all([
-        // Update rooms URL to filter by property
-        axiosInstance.get(`/api/rooms/?property=${currentPropertyId}`, { headers }),
-        axiosInstance.get('/api/topics/', { headers }) // Topics likely aren't property-specific
+        apiClient.get<Room[]>(`/api/rooms/?property=${currentPropertyId}`),
+        apiClient.get<TopicFromAPI[]>(`/api/topics/`),
       ]);
       console.log(`Workspaceed rooms for property ${currentPropertyId}:`, roomsResponse.data);
       console.log('Fetched topics:', topicsResponse.data);
-      setRooms(roomsResponse.data ?? []); // Use nullish coalescing
+      setRooms(roomsResponse.data ?? []);
       setTopics(topicsResponse.data ?? []);
     } catch (error) {
       console.error('Error fetching data:', error);
