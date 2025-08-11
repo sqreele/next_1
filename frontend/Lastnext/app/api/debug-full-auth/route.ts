@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/lib/auth';
-import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   try {
     console.log('🧪 Full auth debug starting...');
     
-    // Check cookies
-    const cookieStore = cookies();
-    const nextAuthCookies = Array.from(cookieStore.entries())
-      .filter(([name]) => name.startsWith('next-auth') || name.startsWith('__Secure-next-auth'))
-      .map(([name, value]) => ({ name, hasValue: !!value.value, valueLength: value.value.length }));
+    // Check cookies from request headers
+    const cookieHeader = request.headers.get('cookie') || '';
+    const nextAuthCookies = cookieHeader
+      .split(';')
+      .map(cookie => cookie.trim())
+      .filter(cookie => cookie.includes('next-auth') || cookie.includes('__Secure-next-auth'))
+      .map(cookie => {
+        const [name, ...valueParts] = cookie.split('=');
+        const value = valueParts.join('=');
+        return { 
+          name: name.trim(), 
+          hasValue: !!value, 
+          valueLength: value.length 
+        };
+      });
     
     console.log('🧪 NextAuth cookies:', nextAuthCookies);
 
@@ -31,6 +40,7 @@ export async function GET(request: NextRequest) {
     let djangoTestResult = null;
     if (session?.user?.accessToken) {
       try {
+        console.log('🧪 Testing Django API with token...');
         const djangoResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/properties/`, {
           headers: {
             'Authorization': `Bearer ${session.user.accessToken}`,
@@ -46,18 +56,27 @@ export async function GET(request: NextRequest) {
         
         if (djangoResponse.ok) {
           const data = await djangoResponse.json();
-          djangoTestResult.dataLength = data.length;
+          djangoTestResult.dataLength = Array.isArray(data) ? data.length : 0;
+          djangoTestResult.dataType = typeof data;
         } else {
           djangoTestResult.error = await djangoResponse.text();
         }
+        
+        console.log('🧪 Django API test result:', djangoTestResult);
       } catch (error) {
-        djangoTestResult = { error: error.message };
+        console.error('🧪 Django API test error:', error);
+        djangoTestResult = { error: (error as Error).message };
       }
+    } else {
+      console.log('🧪 No access token available for Django API test');
     }
 
-    return NextResponse.json({
+    const result = {
       timestamp: new Date().toISOString(),
-      cookies: nextAuthCookies,
+      cookies: {
+        total: nextAuthCookies.length,
+        cookies: nextAuthCookies
+      },
       session: {
         exists: !!session,
         hasUser: !!session?.user,
@@ -72,16 +91,27 @@ export async function GET(request: NextRequest) {
       environment: {
         nodeEnv: process.env.NODE_ENV,
         hasNextAuthSecret: !!process.env.NEXTAUTH_SECRET,
+        nextAuthSecretLength: process.env.NEXTAUTH_SECRET?.length,
         nextAuthUrl: process.env.NEXTAUTH_URL,
         apiUrl: process.env.NEXT_PUBLIC_API_URL
       }
+    };
+
+    console.log('🧪 Debug result summary:', {
+      hasSession: result.session.exists,
+      hasAccessToken: result.session.hasAccessToken,
+      cookiesFound: result.cookies.total,
+      djangoApiStatus: djangoTestResult?.status
     });
+
+    return NextResponse.json(result);
 
   } catch (error) {
     console.error('🧪 Auth debug error:', error);
     return NextResponse.json({
-      error: error.message,
-      stack: error.stack
+      error: (error as Error).message,
+      stack: (error as Error).stack,
+      timestamp: new Date().toISOString()
     }, { status: 500 });
   }
 }
