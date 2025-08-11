@@ -1,4 +1,4 @@
-import type { Property } from "@/app/lib/types"; // Ensure this is correctly imported
+import type { Property } from "@/app/lib/types";
 import "next-auth";
 import "next-auth/jwt";
 
@@ -9,11 +9,11 @@ declare module "next-auth" {
     email: string | null;
     profile_image: string | null;
     positions: string;
-    properties: Property[]; // Use imported Property type
+    properties: Property[];
     accessToken: string;
     refreshToken: string;
-    accessTokenExpires?: number; // Add this property
-    created_at?: string; // Make optional to avoid strict TypeScript issues
+    accessTokenExpires?: number;
+    created_at?: string;
   }
 
   interface Session {
@@ -23,15 +23,16 @@ declare module "next-auth" {
       email: string | null;
       profile_image: string | null;
       positions: string;
-      properties: Property[]; // Use imported Property type
+      properties: Property[];
       accessToken: string;
       refreshToken: string;
-      accessTokenExpires?: number; // Add this property
+      accessTokenExpires?: number;
       sessionToken?: string;
-      created_at?: string; // Optional
+      created_at?: string;
       error?: string;
     };
-    error?: string; // Add this line to define the error property
+    error?: string;
+    expires: string;
   }
 }
 
@@ -42,11 +43,14 @@ declare module "next-auth/jwt" {
     email: string | null;
     profile_image: string | null;
     positions: string;
-    properties: Property[]; // Use imported Property type
-    created_at?: string; // Optional
+    properties: Property[];
+    created_at?: string;
     accessToken: string;
     refreshToken: string;
-    accessTokenExpires?: number; // Add this property
+    accessTokenExpires?: number;
     error?: string;
+    iat?: number;
+    exp?: number;
+    jti?: string;
   }
 }
