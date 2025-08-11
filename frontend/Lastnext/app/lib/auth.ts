@@ -9,6 +9,7 @@ import { getUserProperties } from "./prisma-user-property";
 import { refreshAccessToken } from "./auth-helpers";
 import { API_CONFIG, AUTH_CONFIG, ERROR_TYPES } from "./config";
 import { decodeToken, validateToken, getTokenExpiryTime } from "./utils/auth-utils";
+import { getErrorMessage } from "./utils/error-utils";
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -129,7 +130,7 @@ export const authOptions: NextAuthOptions = {
             try {
               normalizedProperties = await getUserProperties(userId);
             } catch (error) {
-              console.error("🔐 Failed to get properties:", error);
+              console.error("🔐 Failed to get properties:", getErrorMessage(error));
               normalizedProperties = [];
             }
           }
@@ -165,7 +166,7 @@ export const authOptions: NextAuthOptions = {
           return returnUser;
         } catch (error) {
           console.error("🔐 Authorization Error:", error);
-          throw new Error("Unable to log in. Please check your credentials.");
+          throw new Error(`Unable to log in. ${getErrorMessage(error)}`);
         }
       },
     }),
