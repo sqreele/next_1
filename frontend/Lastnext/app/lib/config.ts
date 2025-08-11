@@ -15,15 +15,15 @@ export const API_CONFIG = {
   
   // ✅ Add all missing endpoints
   endpoints: {
-    token: '/api/token/',
-    tokenRefresh: '/api/token/refresh/',
-    userProfile: '/api/user-profiles/',
-    properties: '/api/properties/',
-    rooms: '/api/rooms/',
-    jobs: '/api/jobs/',
-    topics: '/api/topics/',
-    machines: '/api/machines/',
-    preventiveMaintenance: '/api/preventive-maintenance/',
+    token: '/api/v1/token/',
+    tokenRefresh: '/api/v1/token/refresh/',
+    userProfile: '/api/v1/user-profiles/',
+    properties: '/api/v1/properties/',
+    rooms: '/api/v1/rooms/',
+    jobs: '/api/v1/jobs/',
+    topics: '/api/v1/topics/',
+    machines: '/api/v1/machines/',
+    preventiveMaintenance: '/api/v1/preventive-maintenance/',
   }
 };
 

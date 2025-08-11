@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const apiUrl = `${API_CONFIG.baseUrl}/api/properties/`;
+    const apiUrl = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.properties}`;
     console.log('🔍 Properties API calling:', apiUrl);
     console.log('🔍 Properties API headers:', {
       hasAuth: !!session.user.accessToken,

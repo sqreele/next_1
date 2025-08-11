@@ -19,7 +19,7 @@ export async function GET(
 
     // Fetch property from the external API
     const response = await fetch(
-      `${API_CONFIG.baseUrl}/api/properties/${propertyId}/`,
+      `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.properties}${propertyId}/`,
       {
         headers: {
           'Authorization': `Bearer ${session.user.accessToken}`,

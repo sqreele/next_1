@@ -100,7 +100,7 @@ export async function fetchWithToken<T>(
 }
 
 export async function fetchProperties(accessToken?: string): Promise<Property[]> {
-  return fetchWithToken<Property[]>('/api/properties/', accessToken);
+  return fetchWithToken<Property[]>(API_CONFIG.endpoints.properties, accessToken);
 }
 
 export async function fetchJobsForProperty(
@@ -108,7 +108,7 @@ export async function fetchJobsForProperty(
   accessToken?: string
 ): Promise<Job[]> {
   try {
-    const jobs = await fetchWithToken<Job[]>(`/api/jobs/?property=${propertyId}`, accessToken);
+    const jobs = await fetchWithToken<Job[]>(`${API_CONFIG.endpoints.jobs}?property=${propertyId}`, accessToken);
     console.log(`📋 Jobs fetched: { count: ${jobs.length} }`);
     const sanitizedJobs = sanitizeJobsData(jobs);
     return fixJobsImageUrls(sanitizedJobs);
@@ -119,14 +119,14 @@ export async function fetchJobsForProperty(
 }
 
 export async function fetchJobs(accessToken?: string): Promise<Job[]> {
-  const jobs = await fetchWithToken<Job[]>('/api/jobs/', accessToken);
+  const jobs = await fetchWithToken<Job[]>( API_CONFIG.endpoints.jobs, accessToken);
   const sanitizedJobs = sanitizeJobsData(jobs);
   return fixJobsImageUrls(sanitizedJobs);
 }
 
 export async function fetchJob(jobId: string, accessToken?: string): Promise<Job | null> {
   try {
-    const job = await fetchWithToken<Job>(`/api/jobs/${jobId}/`, accessToken);
+    const job = await fetchWithToken<Job>(`${API_CONFIG.endpoints.jobs}${jobId}/`, accessToken);
     const sanitizedJob = sanitizeJobData(job);
     return fixJobImageUrls(sanitizedJob);
   } catch (error) {
@@ -140,11 +140,11 @@ export async function updateJob(
   jobData: Partial<Job>,
   accessToken?: string
 ): Promise<Job> {
-  return fetchWithToken<Job>(`/api/jobs/${jobId}/`, accessToken, "PATCH", jobData);
+  return fetchWithToken<Job>(`${API_CONFIG.endpoints.jobs}${jobId}/`, accessToken, "PATCH", jobData);
 }
 
 export async function deleteJob(jobId: string, accessToken?: string): Promise<void> {
-  await fetchWithToken<void>(`/api/jobs/${jobId}/`, accessToken, "DELETE");
+  await fetchWithToken<void>(`${API_CONFIG.endpoints.jobs}${jobId}/`, accessToken, "DELETE");
 }
 
 export async function updateJobStatus(
@@ -152,18 +152,18 @@ export async function updateJobStatus(
   status: JobStatus,
   accessToken?: string
 ): Promise<Job> {
-  return fetchWithToken<Job>(`/api/jobs/${jobId}/`, accessToken, "PATCH", { status });
+  return fetchWithToken<Job>(`${API_CONFIG.endpoints.jobs}${jobId}/`, accessToken, "PATCH", { status });
 }
 
 export async function fetchMyJobs(accessToken?: string): Promise<Job[]> {
-  const jobs = await fetchWithToken<Job[]>('/api/jobs/my-jobs/', accessToken);
+  const jobs = await fetchWithToken<Job[]>(`${API_CONFIG.endpoints.jobs}my-jobs/`, accessToken);
   const sanitizedJobs = sanitizeJobsData(jobs);
   return fixJobsImageUrls(sanitizedJobs);
 }
 
 export async function fetchRoom(roomId: string, accessToken?: string): Promise<Room | null> {
   try {
-    return await fetchWithToken<Room>(`/api/rooms/${roomId}/`, accessToken);
+    return await fetchWithToken<Room>(`${API_CONFIG.endpoints.rooms}${roomId}/`, accessToken);
   } catch (error) {
     console.error(`Error fetching room ${roomId}:`, error);
     return null;
@@ -171,7 +171,7 @@ export async function fetchRoom(roomId: string, accessToken?: string): Promise<R
 }
 
 export async function fetchJobsForRoom(roomId: string, accessToken?: string): Promise<Job[]> {
-  const jobs = await fetchWithToken<Job[]>(`/api/jobs/?room=${roomId}`, accessToken);
+  const jobs = await fetchWithToken<Job[]>(`${API_CONFIG.endpoints.jobs}?room=${roomId}`, accessToken);
   const sanitizedJobs = sanitizeJobsData(jobs);
   return fixJobsImageUrls(sanitizedJobs);
 }
