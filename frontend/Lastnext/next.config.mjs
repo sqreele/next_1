@@ -1,4 +1,8 @@
 // @ts-check
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const projectRoot = path.dirname(fileURLToPath(import.meta.url))
 /**
  * @type {import('next').NextConfig}
  */
@@ -54,6 +58,14 @@ const nextConfig = {
   experimental: {
     // ✅ Fixed: serverActions must be an object in Next.js 15+
     serverActions: {},
+  },
+  
+  // Ensure webpack resolves the '@' alias to the project root
+  webpack: (config) => {
+    config.resolve = config.resolve || {};
+    config.resolve.alias = config.resolve.alias || {};
+    config.resolve.alias['@'] = projectRoot;
+    return config;
   },
   
   async rewrites() {
