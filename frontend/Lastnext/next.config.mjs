@@ -71,6 +71,12 @@ const nextConfig = {
   async rewrites() {
     const privateApi = process.env.NEXT_PRIVATE_API_URL || 'http://django-backend:8000';
     return [
+      // Pass-through for already versioned API calls
+      {
+        source: '/api/v1/:path*',
+        destination: `${privateApi}/api/v1/:path*`,
+      },
+      // Convenience: rewrite unversioned /api/* to backend /api/v1/*
       {
         source: '/api/:path*',
         destination: `${privateApi}/api/v1/:path*`,

@@ -20,12 +20,13 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 import debug_toolbar
+from myappLubd import views as app_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('myappLubd.urls')),
     path('api-auth/', include('rest_framework.urls')),
-    
+    path('health/', app_views.health_check, name='root_health_check'),
 ]
 
 # Debug Toolbar
