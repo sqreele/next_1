@@ -378,7 +378,7 @@ export default function CompletePreventiveMaintenance({ params }: CompletePreven
           
           <div className="mt-6 flex flex-wrap gap-2">
             <Link 
-              href="/preventive-maintenance" 
+              href="/dashboard/preventive-maintenance" 
               className="inline-flex items-center bg-gray-100 py-2 px-4 rounded-lg text-gray-700 hover:bg-gray-200 text-sm"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
@@ -423,7 +423,7 @@ export default function CompletePreventiveMaintenance({ params }: CompletePreven
           </div>
           <div className="mt-4">
             <Link 
-              href="/preventive-maintenance" 
+              href="/dashboard/preventive-maintenance" 
               className="inline-flex items-center bg-gray-100 py-2 px-4 rounded-lg text-gray-700 hover:bg-gray-200 text-sm"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
