@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Test Django API call if we have a token
-    let djangoTestResult = null;
+    let djangoTestResult: any = null;
     if (session?.user?.accessToken) {
       try {
         console.log('🧪 Testing Django API with token...');
