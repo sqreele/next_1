@@ -1,11 +1,29 @@
 // app/lib/config.ts
 export const API_CONFIG = {
-  baseUrl: process.env.NEXT_PUBLIC_API_URL || 
-    (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "http://django-backend:8000"),
+  // ✅ Use server-side vs client-side detection
+  baseUrl: (() => {
+    // Server-side: use internal docker networking to avoid SSL issues
+    if (typeof window === 'undefined') {
+      return process.env.NODE_ENV === "development" 
+        ? "http://localhost:8000" 
+        : "http://django-backend:8000";
+    }
+    // Client-side: use public URL
+    return process.env.NEXT_PUBLIC_API_URL || 
+      (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "https://pmcs.site");
+  })(),
+  
+  // ✅ Add all missing endpoints
   endpoints: {
     token: '/api/token/',
     tokenRefresh: '/api/token/refresh/',
     userProfile: '/api/user-profiles/',
+    properties: '/api/properties/',
+    rooms: '/api/rooms/',
+    jobs: '/api/jobs/',
+    topics: '/api/topics/',
+    machines: '/api/machines/',
+    preventiveMaintenance: '/api/preventive-maintenance/',
   }
 };
 
@@ -35,4 +53,11 @@ export const ROUTES = {
   error: '/auth/error',
   dashboard: '/dashboard',
   register: '/auth/register',
-} as const; 
+} as const;
+
+// ✅ Add debug configuration
+export const DEBUG_CONFIG = {
+  logApiCalls: process.env.NODE_ENV === 'development',
+  logAuth: true, // Always log auth for now
+  logSessions: true,
+};
