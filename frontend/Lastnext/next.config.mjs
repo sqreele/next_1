@@ -57,7 +57,12 @@ const nextConfig = {
   },
   
   async rewrites() {
+    const privateApi = process.env.NEXT_PRIVATE_API_URL || 'http://django-backend:8000';
     return [
+      {
+        source: '/api/:path*',
+        destination: `${privateApi}/api/v1/:path*`,
+      },
       {
         source: '/internal-api/:path*',
         destination: 'http://django-backend:8000/:path*',
