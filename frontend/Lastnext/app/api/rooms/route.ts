@@ -2,17 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/lib/auth';
 import { API_CONFIG } from '@/app/lib/config';
+import { getErrorMessage } from '@/app/lib/utils/error-utils';
 
 export async function GET(request: NextRequest) {
   try {
     console.log('🔍 Rooms API - Request started');
+    console.log('🔍 Request URL:', request.url);
     console.log('🔍 Request headers:', {
       cookie: request.headers.get('cookie')?.substring(0, 100) + '...',
       authorization: request.headers.get('authorization'),
       userAgent: request.headers.get('user-agent'),
     });
 
-    // Get session to verify authentication
+    // ✅ CRITICAL: Pass both request and response objects for App Router
     const session = await getServerSession(authOptions);
     
     console.log('🔍 Rooms API Debug:', {
@@ -27,24 +29,26 @@ export async function GET(request: NextRequest) {
       userKeys: session?.user ? Object.keys(session.user) : []
     });
 
-    // Log the full session structure (be careful in production)
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🔍 Full session object:', JSON.stringify(session, null, 2));
+    // If no session, try to debug why
+    if (!session) {
+      console.log('❌ No session found in rooms API');
+      console.log('🔍 Cookies received:', request.headers.get('cookie'));
+      
+      return NextResponse.json({ 
+        error: 'Unauthorized - No session found',
+        debug: {
+          hasCookies: !!request.headers.get('cookie'),
+          requestUrl: request.url,
+          timestamp: new Date().toISOString()
+        }
+      }, { status: 401 });
     }
     
     if (!session?.user?.accessToken) {
       console.log('❌ No access token in session');
       
-      // Try to get session with different approach
-      const alternativeSession = await getServerSession(request as any, {} as any, authOptions);
-      console.log('🔍 Alternative session attempt:', {
-        hasAlternative: !!alternativeSession,
-        hasUser: !!alternativeSession?.user,
-        hasToken: !!alternativeSession?.user?.accessToken
-      });
-      
       return NextResponse.json({ 
-        error: 'Unauthorized',
+        error: 'Unauthorized - No access token',
         debug: {
           hasSession: !!session,
           hasUser: !!session?.user,
@@ -62,7 +66,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Property ID is required' }, { status: 400 });
     }
 
-    const apiUrl = `${API_CONFIG.baseUrl}/api/rooms/?property=${propertyId}`;
+    // ✅ Use internal HTTP endpoint to avoid SSL issues
+    const apiUrl = `http://django-backend:8000/api/rooms/?property=${propertyId}`;
     console.log('🔍 Calling Django API:', apiUrl);
     console.log('🔍 With token length:', session.user.accessToken.length);
 
@@ -72,6 +77,8 @@ export async function GET(request: NextRequest) {
         'Authorization': `Bearer ${session.user.accessToken}`,
         'Content-Type': 'application/json',
       },
+      // ✅ Add timeout and error handling
+      signal: AbortSignal.timeout(10000), // 10 second timeout
     });
 
     console.log('🔍 Django API response:', response.status, response.statusText);
@@ -80,20 +87,33 @@ export async function GET(request: NextRequest) {
       const errorText = await response.text();
       console.error('Failed to fetch rooms:', response.status, response.statusText, errorText);
       return NextResponse.json(
-        { error: 'Failed to fetch rooms', details: errorText }, 
+        { error: 'Failed to fetch rooms', details: errorText, status: response.status }, 
         { status: response.status }
       );
     }
 
     const rooms = await response.json();
-    console.log('🔍 Rooms fetched successfully:', rooms.length || 0);
+    console.log('🔍 Rooms fetched successfully:', Array.isArray(rooms) ? rooms.length : 'Not an array');
     return NextResponse.json(rooms);
 
   } catch (error) {
-    console.error('Error fetching rooms:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    console.error('❌ Error fetching rooms:', error);
+    
+    // Enhanced error logging
+    if (error instanceof Error) {
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    }
+    
     return NextResponse.json(
-      { error: 'Internal server error', details: errorMessage }, 
+      { 
+        error: 'Internal server error', 
+        details: getErrorMessage(error),
+        timestamp: new Date().toISOString()
+      }, 
       { status: 500 }
     );
   }
