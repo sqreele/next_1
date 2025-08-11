@@ -905,12 +905,14 @@ def login_view(request):
         })
     return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@api_view(['GET', 'POST', 'OPTIONS'])
+@permission_classes([AllowAny])
 def log_view(request):
-    """Simple view to log access and return a message"""
-    logger.info(f"Log view accessed by user: {request.user.username}")
-    return Response({"message": "This is a log view"}, status=status.HTTP_200_OK)
+    """Endpoint to accept NextAuth/client logs without requiring auth"""
+    if request.method == 'POST':
+        # Accept log payloads and return no content
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    return Response({"message": "ok"}, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
 @permission_classes([AllowAny])

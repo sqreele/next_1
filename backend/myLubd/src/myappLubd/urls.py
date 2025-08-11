@@ -36,6 +36,7 @@ urlpatterns = [
     path('api/v1/auth/login/', views.login_view, name='login'),
     path('api/v1/auth/register/', views.RegisterView.as_view(), name='register'),
     path('api/v1/auth/google/', views.google_auth, name='google_auth'),
+    path('api/v1/auth/providers/', views.auth_providers, name='auth_providers'),
     
     # Health check
     path('api/v1/health/', views.health_check, name='health_check'),
