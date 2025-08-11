@@ -8,7 +8,7 @@ export const getAuthHeader = (): HeadersInit => {
   
   export const checkAuth = async (API_BASE_URL: string): Promise<boolean> => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth/check/`, {
+      const response = await fetch(`${API_BASE_URL}/api/v1/auth/check/`, {
         credentials: 'include',
         headers: getAuthHeader(),
       });

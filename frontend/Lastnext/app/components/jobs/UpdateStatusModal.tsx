@@ -56,7 +56,7 @@ export function UpdateStatusModal({ job, onComplete, children }: UpdateStatusMod
 
       await delay(1000);
       await fetchWithToken<Job>(
-        `${API_BASE_URL}/api/jobs/${job.job_id}/`,
+        `${API_BASE_URL}/api/v1/jobs/${job.job_id}/`,
         accessToken,
         'PATCH',
         { status: selectedStatus }

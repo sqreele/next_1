@@ -42,7 +42,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setError(null); // Clear previous errors
 
     try {
-      const response = await fetch(`${API_URL}/api/user-profiles/me/`, { // Assuming a /me endpoint exists
+      const response = await fetch(`${API_URL}/api/v1/user-profiles/me/`, { // Using v1 prefix
         // credentials: 'include', // Usually not needed when sending Bearer token
         headers: {
           'Content-Type': 'application/json',

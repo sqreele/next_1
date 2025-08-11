@@ -83,7 +83,7 @@ export default function PreventiveMaintenanceClient({ maintenanceData }: Prevent
     setError(null);
 
     try {
-      const response = await fetch(`/api/preventive-maintenance/${maintenanceData.pm_id}/complete/`, {
+      const response = await fetch(`/api/v1/preventive-maintenance/${maintenanceData.pm_id}/complete/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

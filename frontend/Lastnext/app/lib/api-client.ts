@@ -36,7 +36,7 @@ export class ApiError extends Error {
 
 // Create API client instance with increased timeout and debugging
 const apiClient: AxiosInstance = axios.create({
-  baseURL: "", // Use relative URLs to go through Next.js API routes
+  baseURL: "", // Use relative URLs to go through Next.js API routes (/api/*)
   timeout: 30000, // Increased to 30 seconds
   headers: {
     "Content-Type": "application/json",
