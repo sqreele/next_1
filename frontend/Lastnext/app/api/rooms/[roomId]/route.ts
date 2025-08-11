@@ -19,7 +19,7 @@ export async function GET(
 
     // Fetch room from the external API
     const response = await fetch(
-      `${API_CONFIG.baseUrl}/api/rooms/${roomId}/`,
+      `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.rooms}${roomId}/`,
       {
         headers: {
           'Authorization': `Bearer ${session.user.accessToken}`,

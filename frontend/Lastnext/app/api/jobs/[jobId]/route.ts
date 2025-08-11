@@ -19,7 +19,7 @@ export async function GET(
 
     // Fetch job from the external API
     const response = await fetch(
-      `${API_CONFIG.baseUrl}/api/jobs/${jobId}/`,
+      `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.jobs}${jobId}/`,
       {
         headers: {
           'Authorization': `Bearer ${session.user.accessToken}`,
@@ -65,7 +65,7 @@ export async function PUT(
 
     // Update job in the external API
     const response = await fetch(
-      `${API_CONFIG.baseUrl}/api/jobs/${jobId}/`,
+      `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.jobs}${jobId}/`,
       {
         method: 'PUT',
         headers: {
@@ -113,7 +113,7 @@ export async function PATCH(
 
     // Update job in the external API
     const response = await fetch(
-      `${API_CONFIG.baseUrl}/api/jobs/${jobId}/`,
+      `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.jobs}${jobId}/`,
       {
         method: 'PATCH',
         headers: {
@@ -160,7 +160,7 @@ export async function DELETE(
 
     // Delete job from the external API
     const response = await fetch(
-      `${API_CONFIG.baseUrl}/api/jobs/${jobId}/`,
+      `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.jobs}${jobId}/`,
       {
         method: 'DELETE',
         headers: {

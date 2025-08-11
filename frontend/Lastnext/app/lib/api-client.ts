@@ -86,7 +86,7 @@ async function refreshToken(refreshTokenValue: string): Promise<string | null> {
     // Use standard fetch or a separate axios instance to avoid interceptor loops
     const djangoBaseURL = process.env.NEXT_PUBLIC_API_URL ||
       (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "https://pmcs.site");
-    const response = await fetch(`${djangoBaseURL}/api/token/refresh/`, {
+    const response = await fetch(`${djangoBaseURL}/api/v1/token/refresh/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh: refreshTokenValue }),
@@ -120,7 +120,7 @@ async function refreshToken(refreshTokenValue: string): Promise<string | null> {
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
     // Skip interceptor logic for token refresh endpoint itself
-    if (config.url?.includes('/api/token/refresh/')) {
+    if (config.url?.includes('/api/v1/token/refresh/') || config.url?.includes('/api/token/refresh/')) {
         console.log("[RequestInterceptor] Skipping token logic for refresh request.");
         return config;
     }

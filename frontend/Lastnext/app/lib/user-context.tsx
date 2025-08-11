@@ -59,7 +59,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       console.log('Fetching user profile and properties...');
       
       // Fetch user profile
-      const profileResponse = await fetch(`${API_URL}/api/user-profiles/`, {
+      const profileResponse = await fetch(`${API_URL}/api/v1/user-profiles/`, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
@@ -86,7 +86,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       console.log('Selected profile data:', profileData);
 
       // Fetch properties
-      const propertiesResponse = await fetch(`${API_URL}/api/properties/`, {
+      const propertiesResponse = await fetch(`${API_URL}/api/v1/properties/`, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',

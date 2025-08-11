@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const queryString = searchParams.toString();
 
-    const apiUrl = `${API_CONFIG.baseUrl}/api/jobs/${queryString ? `?${queryString}` : ''}`;
+    const apiUrl = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.jobs}${queryString ? `?${queryString}` : ''}`;
     console.log('🔍 Jobs API calling:', apiUrl);
     console.log('🔍 Jobs API headers:', {
       hasAuth: !!session.user.accessToken,
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
 
     // Create job in the external API
     const response = await fetch(
-      `${API_CONFIG.baseUrl}/api/jobs/`,
+      `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.jobs}`,
       {
         method: 'POST',
         headers: {

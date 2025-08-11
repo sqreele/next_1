@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch topics from the external API
     const response = await fetch(
-      `${API_CONFIG.baseUrl}/api/topics/`,
+      `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.topics}`,
       {
         headers: {
           'Authorization': `Bearer ${session.user.accessToken}`,
@@ -41,4 +41,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}

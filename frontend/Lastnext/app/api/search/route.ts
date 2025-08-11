@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     // Search jobs
     if (type === 'all' || type === 'jobs') {
       searchPromises.push(
-        fetch(`${API_CONFIG.baseUrl}/api/jobs/?search=${encodeURIComponent(searchTerm)}`, {
+        fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.jobs}?search=${encodeURIComponent(searchTerm)}`, {
           headers: {
             'Authorization': `Bearer ${session.user.accessToken}`,
             'Content-Type': 'application/json',
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
     // Search properties
     if (type === 'all' || type === 'properties') {
       searchPromises.push(
-        fetch(`${API_CONFIG.baseUrl}/api/properties/?search=${encodeURIComponent(searchTerm)}`, {
+        fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.properties}?search=${encodeURIComponent(searchTerm)}`, {
           headers: {
             'Authorization': `Bearer ${session.user.accessToken}`,
             'Content-Type': 'application/json',
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     // Search rooms
     if (type === 'all' || type === 'rooms') {
       searchPromises.push(
-        fetch(`${API_CONFIG.baseUrl}/api/rooms/?search=${encodeURIComponent(searchTerm)}`, {
+        fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.rooms}?search=${encodeURIComponent(searchTerm)}`, {
           headers: {
             'Authorization': `Bearer ${session.user.accessToken}`,
             'Content-Type': 'application/json',
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     // Search topics
     if (type === 'all' || type === 'topics') {
       searchPromises.push(
-        fetch(`${API_CONFIG.baseUrl}/api/topics/?search=${encodeURIComponent(searchTerm)}`, {
+        fetch(`${API_CONFIG.baseUrl}${API_CONFIG.endpoints.topics}?search=${encodeURIComponent(searchTerm)}`, {
           headers: {
             'Authorization': `Bearer ${session.user.accessToken}`,
             'Content-Type': 'application/json',
