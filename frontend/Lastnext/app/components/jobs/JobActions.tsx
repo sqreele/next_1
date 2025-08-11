@@ -7,7 +7,7 @@ import { Button } from "@/app/components/ui/button";
 import CreateJobButton from "@/app/components/jobs/CreateJobButton";
 import { pdf } from "@react-pdf/renderer";
 import { saveAs } from "file-saver";
-import JobsPDFDocument from "@/app/components/ducument/JobsPDFGenerator";
+import JobsPDFDocument from "@/app/components/document/JobsPDFGenerator";
 import { useProperty } from "@/app/lib/PropertyContext";
 import {
   DropdownMenu,
