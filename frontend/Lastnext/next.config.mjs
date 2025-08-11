@@ -25,12 +25,11 @@ const nextConfig = {
   
   trailingSlash: true, // Optional, depending on your backend
   
-  // ✅ Add explicit environment variables for better session handling
+  // ✅ Remove NODE_ENV - it's automatically managed by Next.js
   env: {
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
     NEXTAUTH_URL: process.env.NEXTAUTH_URL,
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    NODE_ENV: process.env.NODE_ENV,
   },
   
   // ✅ Add logging for debugging API requests
@@ -59,8 +58,6 @@ const nextConfig = {
   experimental: {
     // Enable server actions if needed
     serverActions: true,
-    // Enable if you're using the app directory structure
-    // appDir: true,
   },
   
   // ✅ Add rewrites for internal API calls to avoid SSL issues
