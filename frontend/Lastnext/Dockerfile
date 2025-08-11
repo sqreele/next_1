@@ -163,6 +163,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # Ensure Prisma CLI is available at runtime for generate/db push
 RUN npm install -g prisma@6.13.0
 
+# Set entrypoint before dropping privileges
+COPY app/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && chown nextjs:nodejs /entrypoint.sh
+
 # Switch to non-root user for security
 USER nextjs
 
@@ -170,6 +174,4 @@ USER nextjs
 EXPOSE 3000
 
 # Use entrypoint that ensures Prisma client is generated and DB is ready
-COPY app/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
