@@ -532,8 +532,38 @@ class MachineViewSet(viewsets.ModelViewSet):
 # Other ViewSets and Views (unchanged)
 class RoomViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    queryset = Room.objects.all()
     serializer_class = RoomSerializer
+
+    def get_queryset(self):
+        """
+        Return rooms that belong to properties the user has access to.
+        """
+        user = self.request.user
+        logger.info(f"User {user.username} requesting rooms")
+        
+        # Get properties the user has access to
+        user_properties = Property.objects.filter(users=user)
+        logger.info(f"User has access to {user_properties.count()} properties")
+        
+        # Filter rooms by property parameter if provided
+        property_id = self.request.query_params.get('property')
+        if property_id:
+            logger.info(f"Filtering rooms by property: {property_id}")
+            # Check if user has access to this specific property
+            try:
+                property_obj = user_properties.get(property_id=property_id)
+                queryset = Room.objects.filter(properties=property_obj)
+                logger.info(f"Found {queryset.count()} rooms for property {property_id}")
+                return queryset
+            except Property.DoesNotExist:
+                logger.warning(f"User {user.username} doesn't have access to property {property_id}")
+                # Return empty queryset if user doesn't have access
+                return Room.objects.none()
+        
+        # If no property filter, return all rooms from user's properties
+        queryset = Room.objects.filter(properties__in=user_properties).distinct()
+        logger.info(f"Found {queryset.count()} total rooms for user")
+        return queryset
 
 class TopicViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
