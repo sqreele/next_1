@@ -55,7 +55,7 @@ export const ROUTES = {
   register: '/auth/register',
 } as const;
 
-// ✅ Add debug configuration
+// ✅ Add debug configuration (NODE_ENV is still available at runtime)
 export const DEBUG_CONFIG = {
   logApiCalls: process.env.NODE_ENV === 'development',
   logAuth: true, // Always log auth for now
