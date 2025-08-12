@@ -101,7 +101,10 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers,
       body,
-    });
+      // Required by Node.js fetch when sending a request body from a server route
+      // especially when forwarding a stream (e.g., multipart form-data)
+      duplex: 'half',
+    } as any);
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
