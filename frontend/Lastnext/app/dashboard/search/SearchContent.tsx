@@ -27,6 +27,8 @@ export default function SearchContent() {
   // Get auth token from session
   const { data: session } = useSession();
   const accessToken = session?.user?.accessToken;
+  // Get currently selected property (fallback to first user property if available)
+  const { selectedProperty, userProperties } = useProperty();
 
   useEffect(() => {
     const fetchSearchResults = async () => {
@@ -81,16 +83,21 @@ export default function SearchContent() {
         // Fetch rooms with proper error handling
         let roomsData: Room[] = [];
         try {
-          const roomsRes = await fetch('/api/rooms', { headers });
-          if (roomsRes.ok) {
-            roomsData = await roomsRes.json();
-            // Ensure we have an array
-            if (!Array.isArray(roomsData)) {
-              console.warn('Rooms data is not an array:', roomsData);
-              roomsData = [];
-            }
+          const effectivePropertyId = selectedProperty || userProperties?.[0]?.property_id;
+          if (!effectivePropertyId) {
+            console.warn('Skipping rooms fetch: no property selected');
           } else {
-            console.warn('Failed to fetch rooms:', roomsRes.status);
+            const roomsRes = await fetch(`/api/rooms/?property=${encodeURIComponent(effectivePropertyId)}`, { headers });
+            if (roomsRes.ok) {
+              roomsData = await roomsRes.json();
+              // Ensure we have an array
+              if (!Array.isArray(roomsData)) {
+                console.warn('Rooms data is not an array:', roomsData);
+                roomsData = [];
+              }
+            } else {
+              console.warn('Failed to fetch rooms:', roomsRes.status);
+            }
           }
         } catch (roomError) {
           console.error('Error fetching rooms:', roomError);
@@ -109,7 +116,7 @@ export default function SearchContent() {
     };
     
     fetchSearchResults();
-  }, [query, accessToken]);
+  }, [query, accessToken, selectedProperty, userProperties]);
 
   // Create filtered lists with proper null checks
   const filteredJobs = Array.isArray(jobs) ? jobs.filter(job => 
