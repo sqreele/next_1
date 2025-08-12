@@ -104,8 +104,8 @@ const CreateJobForm: React.FC<{ onJobCreated?: () => void }> = ({ onJobCreated }
         return;
       }
       const [roomsResponse, topicsResponse] = await Promise.all([
-        axios.get(`/api/rooms/?property=${selectedProperty}`, { headers }),
-        axios.get(`/api/topics/`, { headers }),
+        axios.get(`/api/v1/rooms/?property=${selectedProperty}`, { headers }),
+        axios.get(`/api/v1/topics/`, { headers }),
       ]);
 
       if (!Array.isArray(roomsResponse.data)) throw new Error('Invalid rooms data');
