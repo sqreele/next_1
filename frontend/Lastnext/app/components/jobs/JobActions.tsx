@@ -55,6 +55,7 @@ export default function JobActions({
   const router = useRouter();
   const [isGenerating, setIsGenerating] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [roomSearch, setRoomSearch] = useState<string>("");
   const [isLoadingRooms, setIsLoadingRooms] = useState(false);
   const { selectedProperty, setSelectedProperty } = useProperty() as PropertyContextType;
 
@@ -91,6 +92,7 @@ export default function JobActions({
     const fetchRooms = async () => {
       if (!selectedProperty) {
         setRooms([]);
+        setRoomSearch("");
         return;
       }
 
@@ -102,6 +104,7 @@ export default function JobActions({
           const roomsData = await response.json();
           console.log('📋 Rooms fetched:', roomsData);
           setRooms(roomsData);
+          setRoomSearch("");
         } else {
           console.error('❌ Failed to fetch rooms:', response.status);
           setRooms([]);
@@ -243,6 +246,16 @@ export default function JobActions({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className={dropdownContentClass}>
             <DropdownMenuLabel className={menuLabelClass}>Rooms</DropdownMenuLabel>
+            <div className="px-2 pb-1">
+              <input
+                type="text"
+                value={roomSearch}
+                onChange={(e) => setRoomSearch(e.target.value)}
+                placeholder="Search room number, name, or type..."
+                className="w-full h-8 px-2 text-xs rounded bg-zinc-900 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none"
+                disabled={!selectedProperty}
+              />
+            </div>
             <DropdownMenuItem 
               onClick={() => onRoomFilter?.(null)} 
               className={menuItemClass}
@@ -251,7 +264,16 @@ export default function JobActions({
               <DoorOpen className="h-4 w-4" />
               All Rooms
             </DropdownMenuItem>
-            {rooms.map((room) => (
+            {rooms
+              .filter((room) => {
+                if (!roomSearch) return true;
+                const q = roomSearch.toLowerCase();
+                const byId = String(room.room_id ?? '').toLowerCase().includes(q);
+                const byName = (room.name ?? '').toLowerCase().includes(q);
+                const byType = (room.room_type ?? '').toLowerCase().includes(q);
+                return byId || byName || byType;
+              })
+              .map((room) => (
               <DropdownMenuItem
                 key={room.room_id}
                 onClick={() => onRoomFilter?.(String(room.room_id))}
@@ -328,6 +350,16 @@ export default function JobActions({
             <DropdownMenuSeparator className="bg-zinc-800 my-1" />
 
             <DropdownMenuLabel className={menuLabelClass}>Rooms</DropdownMenuLabel>
+            <div className="px-2 pb-1">
+              <input
+                type="text"
+                value={roomSearch}
+                onChange={(e) => setRoomSearch(e.target.value)}
+                placeholder="Search room number, name, or type..."
+                className="w-full h-8 px-2 text-xs rounded bg-zinc-900 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:outline-none"
+                disabled={!selectedProperty}
+              />
+            </div>
             <DropdownMenuItem 
               onClick={() => onRoomFilter?.(null)} 
               className={menuItemClass}
@@ -335,7 +367,16 @@ export default function JobActions({
             >
               <DoorOpen className="h-4 w-4" /> All Rooms
             </DropdownMenuItem>
-            {rooms.map((room) => (
+            {rooms
+              .filter((room) => {
+                if (!roomSearch) return true;
+                const q = roomSearch.toLowerCase();
+                const byId = String(room.room_id ?? '').toLowerCase().includes(q);
+                const byName = (room.name ?? '').toLowerCase().includes(q);
+                const byType = (room.room_type ?? '').toLowerCase().includes(q);
+                return byId || byName || byType;
+              })
+              .map((room) => (
               <DropdownMenuItem
                 key={room.room_id}
                 onClick={() => onRoomFilter?.(String(room.room_id))}
