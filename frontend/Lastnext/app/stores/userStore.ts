@@ -1,7 +1,7 @@
 'use client';
 import { create } from 'zustand';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+const API_URL = ''; // Use Next.js rewrites with relative /api/v1/* URLs
 const CACHE_DURATION = 5 * 60 * 1000;
 
 export interface PropertyRef {
@@ -55,7 +55,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set({ loading: true });
 
     try {
-      const profileResponse = await fetch(`${API_URL}/api/v1/user-profiles/`, {
+      const profileResponse = await fetch(`/api/v1/user-profiles/`, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
@@ -74,7 +74,7 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
       if (!profileData) throw new Error('No profile data found');
 
-      const propertiesResponse = await fetch(`${API_URL}/api/v1/properties/`, {
+      const propertiesResponse = await fetch(`/api/v1/properties/`, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',

@@ -10,7 +10,7 @@ export interface Topic {
 }
 
 export default class TopicService {
-  private baseUrl: string = '/api/topics/';
+  private baseUrl: string = '/api/v1/topics/';
 
   async getTopics(): Promise<ServiceResponse<Topic[]>> {
     try {

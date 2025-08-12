@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useMemo, MouseEvent } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card";
-import { UpdateStatusModal } from "./UpdateStatusModal";
+import UpdateStatusModal from "./UpdateStatusModal";
 import { Job, JobStatus, Property } from "@/app/lib/types";
 import { LazyImage } from "@/app/components/jobs/LazyImage";
 import { 
@@ -292,17 +292,10 @@ export function JobCard({ job, properties = [] }: JobCardProps) {
 
         <div className="pt-3 border-t border-gray-100">
           <UpdateStatusModal 
-            job={job}
-            onComplete={handleStatusUpdateComplete}
-          >
-            <Button 
-              variant="outline" 
-              size="sm"
-              className="w-full text-sm h-9 font-medium hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
-            >
-              Update Status
-            </Button>
-          </UpdateStatusModal>
+            jobId={job.job_id}
+            currentStatus={job.status}
+            onStatusUpdated={handleStatusUpdateComplete}
+          />
         </div>
       </CardContent>
     </Card>

@@ -19,7 +19,7 @@ export interface Machine {
 }
 
 export default class MachineService {
-  private baseUrl: string = '/api/machines';
+  private baseUrl: string = '/api/v1/machines/';
 
   async getMachines(propertyId?: string): Promise<ServiceResponse<Machine[]>> {
     try {
