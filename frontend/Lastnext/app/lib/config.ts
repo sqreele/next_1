@@ -24,6 +24,8 @@ export const API_CONFIG = {
     topics: '/api/v1/topics/',
     machines: '/api/v1/machines/',
     preventiveMaintenance: '/api/v1/preventive-maintenance/',
+    authForgotPassword: '/api/v1/auth/password/forgot/',
+    authResetPassword: '/api/v1/auth/password/reset/',
   }
 };
 
@@ -53,6 +55,8 @@ export const ROUTES = {
   error: '/auth/error',
   dashboard: '/dashboard',
   register: '/auth/register',
+  forgotPassword: '/auth/forgot-password',
+  resetPassword: '/auth/reset-password',
 } as const;
 
 // ✅ Add debug configuration (NODE_ENV is still available at runtime)

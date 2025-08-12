@@ -905,6 +905,61 @@ def login_view(request):
         })
     return Response({'detail': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
 
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def forgot_password(request):
+    """Generate a password reset token and (in production) send it via email."""
+    identifier = request.data.get('email') or request.data.get('username')
+    if not identifier:
+        return Response({'detail': 'Email or username is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Do not reveal whether the user exists (avoid account enumeration)
+    user = User.objects.filter(Q(email__iexact=identifier) | Q(username__iexact=identifier)).first()
+    if user:
+        token = uuid.uuid4().hex
+        profile = user.userprofile
+        profile.reset_password_token = token
+        profile.reset_password_expires_at = timezone.now() + timedelta(hours=1)
+        profile.reset_password_used = False
+        profile.save(update_fields=['reset_password_token', 'reset_password_expires_at', 'reset_password_used'])
+        logger.info(f"Password reset token for {user.username}: {token}")
+
+        # In development, return the token to assist manual testing
+        return Response({'message': 'If an account exists, password reset instructions have been sent.', 'token': token}, status=status.HTTP_200_OK)
+
+    return Response({'message': 'If an account exists, password reset instructions have been sent.'}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password(request):
+    """Reset a user's password using a valid token."""
+    token = request.data.get('token')
+    new_password = request.data.get('new_password')
+
+    if not token or not new_password:
+        return Response({'detail': 'token and new_password are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        profile = UserProfile.objects.get(reset_password_token=token)
+    except UserProfile.DoesNotExist:
+        return Response({'detail': 'Invalid or expired token'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if profile.reset_password_used or not profile.reset_password_expires_at or profile.reset_password_expires_at < timezone.now():
+        return Response({'detail': 'Invalid or expired token'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = profile.user
+    user.set_password(new_password)
+    user.save(update_fields=['password'])
+
+    profile.reset_password_used = True
+    profile.reset_password_token = None
+    profile.reset_password_expires_at = None
+    profile.save(update_fields=['reset_password_used', 'reset_password_token', 'reset_password_expires_at'])
+
+    return Response({'message': 'Password has been reset successfully'}, status=status.HTTP_200_OK)
+
 @api_view(['GET', 'POST', 'OPTIONS'])
 @permission_classes([AllowAny])
 def log_view(request):

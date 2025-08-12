@@ -591,6 +591,11 @@ class UserProfile(models.Model):
     login_provider = models.CharField(max_length=50, blank=True, null=True)
     last_login_google = models.DateTimeField(null=True, blank=True)
 
+    # Password reset fields
+    reset_password_token = models.CharField(max_length=128, blank=True, null=True)
+    reset_password_expires_at = models.DateTimeField(null=True, blank=True)
+    reset_password_used = models.BooleanField(default=False)
+
     class Meta:
         indexes = [
             models.Index(fields=['google_id']),
