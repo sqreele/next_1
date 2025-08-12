@@ -409,38 +409,74 @@ const PDFMaintenanceGenerator: React.FC<PDFMaintenanceGeneratorProps> = ({
       // Create PDF with proper centering
       const imgData = canvas.toDataURL('image/png', 1.0);
       const pdf = new jsPDF('p', 'mm', 'a4');
-      
+
       // A4 dimensions in mm
       const pdfWidth = 210;
       const pdfHeight = 297;
       const margin = 10; // 10mm margin on all sides
-      const contentWidth = pdfWidth - (margin * 2);
-      const contentHeight = pdfHeight - (margin * 2);
-      
-      // Calculate scaling to fit content within margins
-      const imgWidth = canvas.width;
-      const imgHeight = canvas.height;
-      
-      // Scale to fit width while maintaining aspect ratio
-      const scale = contentWidth / (imgWidth * 0.264583); // Convert pixels to mm
-      const scaledWidth = contentWidth;
-      const scaledHeight = (imgHeight * 0.264583) * scale;
-      
-      console.log('PDF scaling:', scale, 'Scaled dimensions:', scaledWidth, 'x', scaledHeight);
-      
-      let position = margin; // Start with top margin
-      let remainingHeight = scaledHeight;
+      const contentWidth = pdfWidth - margin * 2;
+      const contentHeight = pdfHeight - margin * 2;
 
-      // Add first page with centered content
-      pdf.addImage(imgData, 'PNG', margin, position, scaledWidth, scaledHeight);
-      remainingHeight -= contentHeight;
+      // Conversion helpers
+      const MM_PER_PX = 0.264583; // 1px -> mm at 96 DPI
+      const PX_PER_MM = 1 / MM_PER_PX;
 
-      // Add additional pages if content is longer than one page
-      while (remainingHeight > 0) {
-        position = -(scaledHeight - remainingHeight) + margin;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', margin, position, scaledWidth, scaledHeight);
-        remainingHeight -= contentHeight;
+      // Compute page dimensions in pixels (at the canvas pixel scale)
+      const pageWidthPx = contentWidth * PX_PER_MM;
+      const scaleToFitWidth = pageWidthPx / canvas.width;
+      const pageHeightPx = contentHeight * PX_PER_MM / scaleToFitWidth; // how many source px fit per page when scaled to width
+
+      // Slice the big canvas into page-sized chunks to avoid corrupted PDFs from huge single images
+      const totalPages = Math.ceil(canvas.height / pageHeightPx);
+      const tempCanvas = document.createElement('canvas');
+      const tempCtx = tempCanvas.getContext('2d');
+
+      // Ensure temp canvas matches source width (preserve quality)
+      tempCanvas.width = canvas.width;
+
+      for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+        const sourceY = Math.floor(pageIndex * pageHeightPx);
+        const sliceHeight = Math.min(Math.floor(pageHeightPx), canvas.height - sourceY);
+
+        // Skip empty slices (safety)
+        if (sliceHeight <= 0) continue;
+
+        // Resize temp canvas to current slice height
+        tempCanvas.height = sliceHeight;
+
+        // Clear and draw the slice
+        if (tempCtx) {
+          tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+          tempCtx.drawImage(
+            canvas,
+            0,
+            sourceY,
+            canvas.width,
+            sliceHeight,
+            0,
+            0,
+            tempCanvas.width,
+            sliceHeight
+          );
+        }
+
+        // Use JPEG for smaller file size; adjust quality as needed
+        const sliceDataUrl = tempCanvas.toDataURL('image/jpeg', 0.92);
+
+        // Compute slice height in mm when scaled to fit content width
+        const sliceHeightMm = (sliceHeight / canvas.width) * contentWidth;
+
+        if (pageIndex > 0) {
+          pdf.addPage();
+        }
+        pdf.addImage(
+          sliceDataUrl,
+          'JPEG',
+          margin,
+          margin,
+          contentWidth,
+          sliceHeightMm
+        );
       }
 
       // Save the PDF
