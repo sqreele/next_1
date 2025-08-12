@@ -386,7 +386,7 @@ DeleteDialog.displayName = 'DeleteDialog';
 const MyJobs: React.FC<{ activePropertyId?: string }> = ({ activePropertyId }) => {
   const { toast } = useToast();
   const { data: session, status: sessionStatus } = useSession();
-  const { userProfile, loading: userLoading } = useUser();
+  const { userProfile, loading: userLoading, selectedProperty } = useUser();
   const router = useRouter();
 
   // Use the hook for data fetching
@@ -397,7 +397,7 @@ const MyJobs: React.FC<{ activePropertyId?: string }> = ({ activePropertyId }) =
     refreshJobs,
     updateJob, // Hook's function to update local state
     removeJob, // Hook's function to remove from local state
-  } = useJobsData({ propertyId: activePropertyId });
+  } = useJobsData({ propertyId: activePropertyId ?? selectedProperty });
 
   // Local state for UI
   const [filters, setFilters] = React.useState<FilterState>({
@@ -436,7 +436,7 @@ const MyJobs: React.FC<{ activePropertyId?: string }> = ({ activePropertyId }) =
   // Reset page number when filters or property change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [filters, activePropertyId]);
+  }, [filters, activePropertyId, selectedProperty]);
 
   // Effect to handle redirection if unauthenticated
   React.useEffect(() => {
@@ -578,7 +578,7 @@ const MyJobs: React.FC<{ activePropertyId?: string }> = ({ activePropertyId }) =
               : `Viewing ${filteredJobs.length} of ${jobs.length} total job${jobs.length !== 1 ? 's' : ''}`
             }
             {userProfile?.username && ` for ${userProfile.username}`}
-            {activePropertyId && ` on property ${activePropertyId}`}
+            {(activePropertyId ?? selectedProperty) && ` on property ${(activePropertyId ?? selectedProperty)}`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -586,9 +586,9 @@ const MyJobs: React.FC<{ activePropertyId?: string }> = ({ activePropertyId }) =
             <RefreshCcw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
-          {activePropertyId && (
+          {(activePropertyId ?? selectedProperty) && (
             <CreateJobButton
-              propertyId={activePropertyId}
+              propertyId={(activePropertyId ?? selectedProperty) as string}
               onJobCreated={handleJobCreated}
             />
           )}
@@ -689,7 +689,7 @@ const MyJobs: React.FC<{ activePropertyId?: string }> = ({ activePropertyId }) =
             <p className="text-gray-600 mt-2">
               {jobs.length > 0
                 ? "Try adjusting your filters or search term."
-                : activePropertyId
+                : (activePropertyId ?? selectedProperty)
                   ? "There are no maintenance requests for this property yet."
                   : "You haven't created any maintenance requests."}
             </p>
