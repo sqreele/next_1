@@ -149,7 +149,8 @@ const RoomAutocomplete = ({
         ? safeRooms.filter(room => {
             const nameMatch = room.name?.toLowerCase().includes(searchQuery.toLowerCase());
             const typeMatch = room.room_type?.toLowerCase().includes(searchQuery.toLowerCase());
-            return nameMatch || typeMatch;
+            const idMatch = String(room.room_id ?? '').toLowerCase().includes(searchQuery.toLowerCase());
+            return nameMatch || typeMatch || idMatch;
           })
         : safeRooms;
         
@@ -177,7 +178,8 @@ const RoomAutocomplete = ({
         const nameMatch = room.name.toLowerCase().includes(search);
         const typeMatch = typeof room.room_type === 'string' && 
                          room.room_type.toLowerCase().includes(search);
-        return nameMatch || typeMatch;
+        const idMatch = String(room.room_id ?? '').toLowerCase().includes(search);
+        return nameMatch || typeMatch || idMatch;
       }
       
       // If no search query, include all rooms that passed property filter
@@ -286,7 +288,7 @@ const RoomAutocomplete = ({
         <PopoverContent className="w-[--radix-popover-trigger-width)] p-0 bg-white border border-input shadow-md">
           <Command shouldFilter={false} className="border-0">
             <CommandInput
-              placeholder="Search room name or type..."
+              placeholder="Search room number, name, or type..."
               value={searchQuery}
               onValueChange={setSearchQuery}
               className="h-10 text-sm"
