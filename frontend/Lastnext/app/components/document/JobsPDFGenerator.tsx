@@ -4,13 +4,17 @@ import { Document, Page, Text, View, StyleSheet, Image, Font } from '@react-pdf/
 import { Job, TabValue, FILTER_TITLES } from '@/app/lib/types';
 
 // ✅ Register Thai font (Sarabun)
-Font.register({
-  family: 'Sarabun',
-  fonts: [
-    { src: '/fonts/Sarabun-Regular.ttf', fontWeight: 'normal' },
-    { src: '/fonts/Sarabun-Bold.ttf', fontWeight: 'bold' },
-  ],
-});
+try {
+  Font.register({
+    family: 'Sarabun',
+    fonts: [
+      { src: '/fonts/Sarabun-Regular.ttf', fontWeight: 'normal' },
+      { src: '/fonts/Sarabun-Bold.ttf', fontWeight: 'bold' },
+    ],
+  });
+} catch (e) {
+  // Fallback silently if font registration fails in some environments
+}
 
 interface JobsPDFDocumentProps {
   jobs: Job[];
@@ -102,13 +106,24 @@ const styles = StyleSheet.create({
 
 const JobsPDFDocument: React.FC<JobsPDFDocumentProps> = ({ jobs, filter, selectedProperty, propertyName }) => {
   const filteredJobs = jobs.filter((job) => {
-    if (!selectedProperty) return true;
+  if (!selectedProperty) return true;
 
-    return job.property_id === selectedProperty ||
-      (job.profile_image?.properties.some(
-        (prop) => String(prop.property_id) === selectedProperty
-      )) || false;
+  const matchesDirect = String(job.property_id ?? '') === String(selectedProperty);
+
+  const profileProps: any[] = Array.isArray((job as any).profile_image?.properties)
+    ? (job as any).profile_image!.properties
+    : [];
+
+  const matchesProfileProps = profileProps.some((prop: any) => {
+    if (prop && typeof prop === 'object') {
+      if ('property_id' in prop && String(prop.property_id) === String(selectedProperty)) return true;
+      if ('id' in prop && String((prop as any).id) === String(selectedProperty)) return true;
+    }
+    return String(prop) === String(selectedProperty);
   });
+
+  return matchesDirect || matchesProfileProps;
+});
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'N/A';
@@ -176,7 +191,7 @@ const JobsPDFDocument: React.FC<JobsPDFDocumentProps> = ({ jobs, filter, selecte
           {jobGroup.map((job) => (
             <View key={job.job_id} style={styles.jobRow} wrap={false}>
               <View style={styles.imageColumn}>
-                {job.images && job.images.length > 0 && (
+                {job.images && job.images.length > 0 && job.images[0]?.image_url && (
                   <Image
                     src={job.images[0].image_url}
                     style={styles.jobImage}
