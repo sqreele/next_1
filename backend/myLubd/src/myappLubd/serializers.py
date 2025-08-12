@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.core.validators import FileExtensionValidator
 import math
+import json
 
 # User serializer for basic user data
 class UserSerializer(serializers.HyperlinkedModelSerializer):
@@ -158,6 +159,13 @@ class JobSerializer(serializers.ModelSerializer):
 
         topic_data = validated_data.pop('topic_data', None)
         room_id = validated_data.pop('room_id', None)
+
+        # Safely handle topic_data being provided as a JSON string in multipart/form-data
+        if isinstance(topic_data, str):
+            try:
+                topic_data = json.loads(topic_data)
+            except json.JSONDecodeError:
+                raise serializers.ValidationError({'topic_data': 'Must be valid JSON.'})
 
         if not room_id:
             raise serializers.ValidationError({'room_id': 'This field is required.'})
