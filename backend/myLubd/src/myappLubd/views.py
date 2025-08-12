@@ -940,8 +940,11 @@ def forgot_password(request):
                 f"Thanks,\nPMCS Team"
             )
             try:
-                send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
-                logger.info(f"Password reset email sent to {user.email}")
+                from .email_utils import send_email as send_via_gmail
+                if send_via_gmail(user.email, subject, message, settings.DEFAULT_FROM_EMAIL):
+                    logger.info(f"Password reset email sent to {user.email}")
+                else:
+                    logger.error("Failed to send password reset email (all methods)")
             except Exception as e:
                 logger.error(f"Failed to send password reset email: {e}")
                 # Continue to avoid enumeration

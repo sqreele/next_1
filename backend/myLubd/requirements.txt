@@ -4,6 +4,9 @@
 google-auth==2.27.0
 google-auth-oauthlib==1.2.0
 google-auth-httplib2==0.2.0
+google-api-python-client==2.131.0
+
+# Email / Django utils
 django-dbbackup==4.2.1
 asgiref==3.8.1
 gunicorn==21.2.0
