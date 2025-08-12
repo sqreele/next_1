@@ -25,6 +25,7 @@ import {
   Building,
   Camera
 } from 'lucide-react';
+import apiClient from '@/app/lib/api-client';
 
 interface PreventiveMaintenanceClientProps {
   maintenanceData: PreventiveMaintenance;
@@ -83,20 +84,9 @@ export default function PreventiveMaintenanceClient({ maintenanceData }: Prevent
     setError(null);
 
     try {
-      const response = await fetch(`/api/v1/preventive-maintenance/${maintenanceData.pm_id}/complete/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          completed_date: new Date().toISOString()
-        }),
+      await apiClient.post(`/api/preventive-maintenance/${maintenanceData.pm_id}/complete/`, {
+        completed_date: new Date().toISOString(),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.message || 'Failed to complete maintenance record');
-      }
 
       router.refresh();
     } catch (err: any) {
@@ -106,6 +96,7 @@ export default function PreventiveMaintenanceClient({ maintenanceData }: Prevent
       setIsCompleting(false);
     }
   };
+
 
   // PDF Generation Functions
   const convertImageToBase64 = async (url: string): Promise<string> => {
