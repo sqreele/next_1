@@ -909,7 +909,10 @@ def login_view(request):
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def forgot_password(request):
-    """Generate a password reset token and (in production) send it via email."""
+    """Generate a password reset token and send a reset link to the user's email if available."""
+    from django.conf import settings
+    from django.core.mail import send_mail
+
     identifier = request.data.get('email') or request.data.get('username')
     if not identifier:
         return Response({'detail': 'Email or username is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -925,8 +928,30 @@ def forgot_password(request):
         profile.save(update_fields=['reset_password_token', 'reset_password_expires_at', 'reset_password_used'])
         logger.info(f"Password reset token for {user.username}: {token}")
 
-        # In development, return the token to assist manual testing
-        return Response({'message': 'If an account exists, password reset instructions have been sent.', 'token': token}, status=status.HTTP_200_OK)
+        # Send email if the user has an email address configured
+        if user.email:
+            reset_link = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/auth/reset-password?token={token}"
+            subject = "Reset your password"
+            message = (
+                f"Hello {user.username},\n\n"
+                f"You requested to reset your password. Click the link below to set a new password.\n\n"
+                f"{reset_link}\n\n"
+                f"This link will expire in 1 hour. If you did not request this, you can ignore this email.\n\n"
+                f"Thanks,\nPMCS Team"
+            )
+            try:
+                send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email], fail_silently=False)
+                logger.info(f"Password reset email sent to {user.email}")
+            except Exception as e:
+                logger.error(f"Failed to send password reset email: {e}")
+                # Continue to avoid enumeration
+                pass
+
+        # In development, include token in response for easier testing
+        response_payload = {'message': 'If an account exists, password reset instructions have been sent.'}
+        if settings.DEBUG:
+            response_payload['token'] = token
+        return Response(response_payload, status=status.HTTP_200_OK)
 
     return Response({'message': 'If an account exists, password reset instructions have been sent.'}, status=status.HTTP_200_OK)
 
