@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { usePreventiveMaintenance, PreventiveMaintenanceCompleteRequest } from '@/app/lib/PreventiveContext';
+import { usePreventiveMaintenance } from '@/app/lib/PreventiveContext';
+import type { CompletePreventiveMaintenanceData as PreventiveMaintenanceCompleteRequest } from '@/app/lib/PreventiveMaintenanceService';
 import { MaintenanceImage } from '@/app/lib/preventiveMaintenanceModels';
 import React from 'react';
 import { 

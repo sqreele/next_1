@@ -16,12 +16,12 @@ import {
 import { Badge } from "@/app/components/ui/badge";
 import { ProfileImage } from "@/app/components/profile/ProfileImage";
 import { useUser } from "@/app/lib/user-context";
-import { Property, UserProfile } from "@/app/lib/types";
+import type { PropertyRef } from "@/app/stores/userStore";
 import { cn } from "@/app/lib/utils";
 
 // Define PropertyCardProps
 interface PropertyCardProps {
-  property: Property;
+  property: PropertyRef;
 }
 
 // Profile field props
@@ -95,37 +95,18 @@ function PropertyCard({ property }: PropertyCardProps) {
           <Building2 className="h-5 w-5 text-muted-foreground" />
           <h3 className="font-semibold">{property.name}</h3>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">{property.property_id}</Badge>
-          <Button
-            variant={isSelected ? "default" : "ghost"}
-            size="sm"
-            onClick={handleSelectProperty}
-            className={cn(
-              "text-xs min-h-[36px]",
-              isSelected
-                ? "bg-blue-600 text-white hover:bg-blue-700"
-                : "hover:bg-blue-100 hover:text-blue-700"
-            )}
-          >
-            {isSelected ? "Selected" : "Select"}
-          </Button>
+        {isSelected && (
+          <Badge variant="default">Selected</Badge>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">
+          ID: {String(property.property_id)}
         </div>
-      </div>
-      <p className="text-sm text-muted-foreground">{property.description}</p>
-      <div className="space-y-2">
-        {property.rooms?.map((room) => (
-          <div key={room.room_id} className="flex items-center gap-2 text-sm text-muted-foreground py-1">
-            <span>
-              {room.name} - {room.room_type}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm">
-        <span className="text-muted-foreground">
-          {property.created_at ? new Date(property.created_at).toLocaleDateString() : "N/A"}
-        </span>
+        <Button variant="outline" size="sm" onClick={handleSelectProperty}>
+          Select
+        </Button>
       </div>
     </div>
   );

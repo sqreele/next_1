@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     if (session?.user?.accessToken) {
       try {
         console.log('🧪 Testing Django API with token...');
-        const djangoResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/properties/`, {
+        const djangoResponse = await fetch(`/api/v1/properties/`, {
           headers: {
             'Authorization': `Bearer ${session.user.accessToken}`,
             'Content-Type': 'application/json',

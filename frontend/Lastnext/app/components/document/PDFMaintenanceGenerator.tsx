@@ -104,9 +104,9 @@ const PDFMaintenanceGenerator: React.FC<PDFMaintenanceGeneratorProps> = ({
     const machineOptions: MachineOption[] = [];
     const seen = new Set<string>();
     
-    maintenanceData.forEach(item => {
+    maintenanceData.forEach((item: PreventiveMaintenance) => {
       if (item.machines && Array.isArray(item.machines)) {
-        item.machines.forEach(machine => {
+        item.machines.forEach((machine) => {
           if (typeof machine === 'object' && machine !== null) {
             // Add machine_id option with name as label
             if (machine.machine_id && !seen.has(machine.machine_id)) {
@@ -167,10 +167,10 @@ const PDFMaintenanceGenerator: React.FC<PDFMaintenanceGeneratorProps> = ({
     
     const testFilters = ['M258B868202', 'M251594E2C3', 'M25ECAF24CF', 'FCU240', 'The Elevelator  No. 1'];
     
-    testFilters.forEach(filter => {
-      const matches = maintenanceData.filter(item => itemMatchesMachine(item, filter));
+    testFilters.forEach((filter) => {
+      const matches = maintenanceData.filter((item: PreventiveMaintenance) => itemMatchesMachine(item, filter));
       console.log(`Filter "${filter}": ${matches.length} matches`);
-      matches.forEach(item => {
+      matches.forEach((item: PreventiveMaintenance) => {
         console.log(`  - ${item.pm_id}: ${item.machines?.map(m => `${m.name} (${m.machine_id})`).join(', ')}`);
       });
     });
@@ -689,7 +689,7 @@ const PDFMaintenanceGenerator: React.FC<PDFMaintenanceGeneratorProps> = ({
               className="w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Machines</option>
-              {getUniqueMachines().map(machine => (
+              {getUniqueMachines().map((machine: MachineOption) => (
                 <option key={machine.id} value={machine.id}>
                   {machine.label}
                 </option>
@@ -786,17 +786,17 @@ const PDFMaintenanceGenerator: React.FC<PDFMaintenanceGeneratorProps> = ({
              {filterMachine !== 'all' && (
                <div className="mt-2">
                  <div className="font-medium">Items matching machine filter "{filterMachine}":</div>
-                 {maintenanceData.filter(item => itemMatchesMachine(item, filterMachine)).map(item => (
-                   <div key={item.pm_id} className="ml-4 text-xs">
-                     {item.pm_id}: {item.machines?.map(m => `${m.name} (${m.machine_id})`).join(', ')}
-                   </div>
-                 ))}
+                                  {maintenanceData.filter((item: PreventiveMaintenance) => itemMatchesMachine(item, filterMachine)).map((item: PreventiveMaintenance) => (
+                    <div key={item.pm_id} className="ml-4 text-xs">
+                      {item.pm_id}: {item.machines?.map(m => `${m.name} (${m.machine_id})`).join(', ')}
+                    </div>
+                  ))}
                </div>
              )}
              <details className="mt-2">
                <summary className="cursor-pointer font-medium">Available Machine Options</summary>
                <div className="ml-4 mt-1 text-xs">
-                 {getUniqueMachines().map(machine => (
+                 {getUniqueMachines().map((machine: MachineOption) => (
                    <div key={machine.id}>{machine.id} → {machine.label}</div>
                  ))}
                </div>
@@ -848,21 +848,21 @@ const PDFMaintenanceGenerator: React.FC<PDFMaintenanceGeneratorProps> = ({
            <div className="text-sm text-gray-600">Total Tasks</div>
          </div>
          <div className="text-center">
-           <div className="text-2xl font-bold text-green-600">
-             {filteredData.filter(item => getTaskStatus(item) === 'completed').length}
-           </div>
+                        <div className="text-2xl font-bold text-green-600">
+              {filteredData.filter((item: PreventiveMaintenance) => getTaskStatus(item) === 'completed').length}
+            </div>
            <div className="text-sm text-gray-600">Completed</div>
          </div>
          <div className="text-center">
-           <div className="text-2xl font-bold text-yellow-600">
-             {filteredData.filter(item => getTaskStatus(item) === 'pending').length}
-           </div>
+                      <div className="text-2xl font-bold text-yellow-600">
+            {filteredData.filter((item: PreventiveMaintenance) => getTaskStatus(item) === 'pending').length}
+          </div>
            <div className="text-sm text-gray-600">Pending</div>
          </div>
          <div className="text-center">
-           <div className="text-2xl font-bold text-red-600">
-             {filteredData.filter(item => getTaskStatus(item) === 'overdue').length}
-           </div>
+                      <div className="text-2xl font-bold text-red-600">
+            {filteredData.filter((item: PreventiveMaintenance) => getTaskStatus(item) === 'overdue').length}
+          </div>
            <div className="text-sm text-gray-600">Overdue</div>
          </div>
        </div>
@@ -891,7 +891,7 @@ const PDFMaintenanceGenerator: React.FC<PDFMaintenanceGeneratorProps> = ({
                </tr>
              </thead>
              <tbody>
-               {filteredData.map((item) => (
+               {filteredData.map((item: PreventiveMaintenance) => (
                  <tr key={item.id}>
                    <td className="border border-gray-300 px-3 py-2 font-mono text-xs">{item.pm_id}</td>
                    <td className="border border-gray-300 px-3 py-2 font-medium text-xs">
@@ -929,8 +929,8 @@ const PDFMaintenanceGenerator: React.FC<PDFMaintenanceGeneratorProps> = ({
            Detailed Task Information
          </h2>
          
-         {filteredData.map((item) => (
-           <div key={item.id} className="mb-6 border border-gray-300 rounded-lg p-4">
+                   {filteredData.map((item: PreventiveMaintenance) => (
+            <div key={item.id} className="mb-6 border border-gray-300 rounded-lg p-4">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                <div>
                  <h3 className="text-lg font-semibold text-gray-900 mb-2">

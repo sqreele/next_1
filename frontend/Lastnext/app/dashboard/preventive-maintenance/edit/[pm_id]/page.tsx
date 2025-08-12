@@ -440,7 +440,7 @@ export default function EditPreventiveMaintenancePage() {
             <div className="mb-8">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Topics</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {topics.map((topic) => (
+                {topics.map((topic: import('@/app/lib/TopicService').Topic) => (
                   <label key={topic.id} className="flex items-center space-x-2 cursor-pointer">
                     <input
                       type="checkbox"
