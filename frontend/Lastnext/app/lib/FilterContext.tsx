@@ -2,73 +2,29 @@
 
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
-
-interface FilterState {
-  status: string;
-  frequency: string;
-  search: string;
-  startDate: string;
-  endDate: string;
-  page: number;
-  pageSize: number;
-  machine: string; // Add machine filter
-}
+import React, { createContext, useContext, ReactNode } from 'react';
+import { useFilterStore, type FilterState as FilterStateType } from '@/app/stores/filterStore';
 
 interface FilterContextType {
-  currentFilters: FilterState;
-  setCurrentFilters: (filters: FilterState) => void;
+  currentFilters: FilterStateType;
+  setCurrentFilters: (filters: FilterStateType) => void;
   clearFilters: () => void;
-  updateFilter: (key: keyof FilterState, value: string | number) => void;
+  updateFilter: (key: keyof FilterStateType, value: string | number) => void;
 }
-
-const defaultFilters: FilterState = {
-  status: '',
-  frequency: '',
-  search: '',
-  startDate: '',
-  endDate: '',
-  page: 1,
-  pageSize: 10,
-  machine: '', // Add default machine filter
-};
 
 const FilterContext = createContext<FilterContextType | undefined>(undefined);
 
 export const FilterProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [currentFilters, setCurrentFilters] = useState<FilterState>(defaultFilters);
-
-  const clearFilters = () => {
-    setCurrentFilters(defaultFilters);
-  };
-
-  const updateFilter = (key: keyof FilterState, value: string | number) => {
-    setCurrentFilters(prev => ({
-      ...prev,
-      [key]: value,
-      // Reset page when filter changes (except when updating page itself)
-      ...(key !== 'page' && key !== 'pageSize' && { page: 1 })
-    }));
-  };
-
-  return (
-    <FilterContext.Provider value={{
-      currentFilters,
-      setCurrentFilters,
-      clearFilters,
-      updateFilter
-    }}>
-      {children}
-    </FilterContext.Provider>
-  );
+  return <FilterContext.Provider value={undefined}>{children}</FilterContext.Provider>;
 };
 
 export const useFilters = () => {
-  const context = useContext(FilterContext);
-  if (context === undefined) {
-    throw new Error('useFilters must be used within a FilterProvider');
-  }
-  return context;
+  const currentFilters = useFilterStore((s) => s.currentFilters);
+  const setCurrentFilters = useFilterStore((s) => s.setCurrentFilters);
+  const clearFilters = useFilterStore((s) => s.clearFilters);
+  const updateFilter = useFilterStore((s) => s.updateFilter);
+
+  return { currentFilters, setCurrentFilters, clearFilters, updateFilter } as FilterContextType;
 };
 
-export type { FilterState };
+export type { FilterStateType as FilterState };

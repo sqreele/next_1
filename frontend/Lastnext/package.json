@@ -48,7 +48,8 @@
     "react-dropzone": "^14.3.5",
     "recharts": "^2.15.0",
     "tailwind-merge": "^2.5.5",
-    "yup": "^1.5.0"
+    "yup": "^1.5.0",
+    "zustand": "^4.5.7"
   },
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.8",

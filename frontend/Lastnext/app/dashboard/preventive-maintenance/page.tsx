@@ -63,26 +63,26 @@ export default function PreventiveMaintenanceListPage() {
 
   // Enhanced machine options with better display
   const machineOptions = useMemo((): MachineOption[] => {
-    const options = machines.map(machine => ({
+    const options = machines.map((machine: import('@/app/lib/MachineService').Machine) => ({
       id: machine.machine_id,
       label: `${machine.name} (${machine.machine_id})`,
       name: machine.name,
       machine_id: machine.machine_id,
-      count: maintenanceItems.filter(item => 
-        item.machines?.some(m => m.machine_id === machine.machine_id)
+      count: maintenanceItems.filter((item: PreventiveMaintenance) => 
+        item.machines?.some((m) => m.machine_id === machine.machine_id)
       ).length
     }));
     
-    return options.sort((a, b) => a.name.localeCompare(b.name));
+    return options.sort((a: MachineOption, b: MachineOption) => a.name.localeCompare(b.name));
   }, [machines, maintenanceItems]);
 
   // Enhanced stats calculation
   const stats = useMemo((): Stats => {
-    const completed = maintenanceItems.filter(item => item.completed_date).length;
-    const overdue = maintenanceItems.filter(item => 
+    const completed = maintenanceItems.filter((item: PreventiveMaintenance) => item.completed_date).length;
+    const overdue = maintenanceItems.filter((item: PreventiveMaintenance) => 
       !item.completed_date && new Date(item.scheduled_date) < new Date()
     ).length;
-    const pending = maintenanceItems.filter(item => 
+    const pending = maintenanceItems.filter((item: PreventiveMaintenance) => 
       !item.completed_date && new Date(item.scheduled_date) >= new Date()
     ).length;
     
@@ -148,7 +148,7 @@ export default function PreventiveMaintenanceListPage() {
 
   // Utility function to get machine name by ID
   const getMachineNameById = useCallback((machineId: string) => {
-    const machine = machines.find(m => m.machine_id === machineId);
+    const machine = machines.find((m: import('@/app/lib/MachineService').Machine) => m.machine_id === machineId);
     return machine ? machine.name : machineId;
   }, [machines]);
 
@@ -214,7 +214,7 @@ export default function PreventiveMaintenanceListPage() {
   // Selection handlers
   const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
-      setSelectedItems(sortedItems.map(item => item.pm_id));
+      setSelectedItems(sortedItems.map((item: PreventiveMaintenance) => item.pm_id));
     } else {
       setSelectedItems([]);
     }

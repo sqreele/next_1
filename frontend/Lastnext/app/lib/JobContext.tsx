@@ -1,7 +1,8 @@
 // /app/lib/JobContext.tsx
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode } from 'react';
+import { useJobStore } from '@/app/stores/jobStore';
 
 interface JobContextType {
   jobCreationCount: number; // Updated to number
@@ -11,23 +12,11 @@ interface JobContextType {
 const JobContext = createContext<JobContextType | undefined>(undefined);
 
 export function JobProvider({ children }: { children: ReactNode }) {
-  const [jobCreationCount, setJobCreationCount] = useState(0);
-
-  const triggerJobCreation = () => {
-    setJobCreationCount(prev => prev + 1); // Increment counter on job creation
-  };
-
-  return (
-    <JobContext.Provider value={{ jobCreationCount, triggerJobCreation }}>
-      {children}
-    </JobContext.Provider>
-  );
+  return <JobContext.Provider value={undefined}>{children}</JobContext.Provider>;
 }
 
 export function useJob() {
-  const context = useContext(JobContext);
-  if (!context) {
-    throw new Error('useJob must be used within a JobProvider');
-  }
-  return context;
+  const jobCreationCount = useJobStore((s) => s.jobCreationCount);
+  const triggerJobCreation = useJobStore((s) => s.triggerJobCreation);
+  return { jobCreationCount, triggerJobCreation } as JobContextType;
 }
