@@ -29,6 +29,7 @@ function LoginForm() {
   useEffect(() => {
     const errorParam = searchParams.get('error');
     const registeredParam = searchParams.get('registered');
+    const resetParam = searchParams.get('reset');
     
     if (errorParam) {
       switch (errorParam) {
@@ -47,6 +48,8 @@ function LoginForm() {
       }
     } else if (registeredParam === 'success') {
       setError('Registration successful! Please log in with your new credentials.');
+    } else if (resetParam === 'success') {
+      setError('Password reset successful! Please log in with your new password.');
     }
   }, [searchParams]);
 
