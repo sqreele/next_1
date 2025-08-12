@@ -196,27 +196,23 @@ const CreateJobButton: React.FC<CreateJobButtonProps> = ({ propertyId, onJobCrea
           title: values.topic.title.trim(),
           description: values.topic.description?.trim() || '', // Handle potentially missing description
         }),
-        remarks: values.remarks?.trim() || '', // Send empty string if no remarks
-        username: session.user.username, // Send relevant user info
-        user_id: session.user.id,
+        // Only include remarks if non-empty after trimming
+        ...(values.remarks && values.remarks.trim() ? { remarks: values.remarks.trim() } : {}),
         is_defective: values.is_defective,
-        property_id: propertyId, // *** USE THE PROP HERE ***
-      };
+      } as Record<string, string | number | boolean>;
 
       // Validate essential IDs before appending
       if (!payload.room_id || payload.room_id === 0) {
           throw new Error("Invalid Room selection.");
       }
-       if (!payload.property_id) {
-          throw new Error("Invalid Property ID.");
-      }
 
 
       // Append payload fields to FormData
       Object.entries(payload).forEach(([key, value]) => {
-          // Convert ALL values to strings for FormData
-          const valueToAppend = value === null || value === undefined ? '' : String(value);
-          formData.append(key, valueToAppend);
+          if (value === null || value === undefined) return;
+          const stringValue = String(value);
+          if (key === 'remarks' && stringValue.trim() === '') return;
+          formData.append(key, stringValue);
       });
 
       // Append files
@@ -228,7 +224,6 @@ const CreateJobButton: React.FC<CreateJobButtonProps> = ({ propertyId, onJobCrea
       const response = await axiosInstance.post('/api/jobs/', formData, {
         headers: {
           // Content-Type is set automatically by browser for FormData
-          'Content-Type': undefined, // Let browser set boundary
           Authorization: `Bearer ${session.user.accessToken}`,
         },
       });

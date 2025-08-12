@@ -127,6 +127,8 @@ class JobSerializer(serializers.ModelSerializer):
     topic_data = serializers.JSONField(write_only=True)
     room_id = serializers.IntegerField(write_only=True)
     image_urls = serializers.SerializerMethodField()
+    # Make remarks optional with default empty string
+    remarks = serializers.CharField(required=False, allow_blank=True, allow_null=True, default="")
 
     class Meta:
         model = Job
