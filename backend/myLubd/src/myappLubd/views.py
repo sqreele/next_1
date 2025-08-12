@@ -618,6 +618,33 @@ class JobViewSet(viewsets.ModelViewSet):
         else:
             serializer.save()
 
+    @action(detail=False, methods=['get'], url_path='my-jobs')
+    def my_jobs(self, request):
+        """Return jobs created by the authenticated user."""
+        queryset = self.get_queryset().filter(user=request.user)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='images', parser_classes=[MultiPartParser, FormParser])
+    def upload_images(self, request, job_id=None):
+        """Upload one or more images for a job using the 'images' form field."""
+        job = self.get_object()
+        images = request.FILES.getlist('images')
+        if not images:
+            return Response({'detail': 'No images provided. Use "images" field.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        for image in images:
+            JobImage.objects.create(
+                job=job,
+                image=image,
+                uploaded_by=request.user if request.user.is_authenticated else None
+            )
+
+        job.refresh_from_db()
+        from .serializers import JobImageSerializer
+        serializer = JobImageSerializer(job.job_images.all(), many=True, context={'request': request})
+        return Response({'images': serializer.data}, status=status.HTTP_201_CREATED)
+
 class UserProfileViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = UserProfile.objects.all()
