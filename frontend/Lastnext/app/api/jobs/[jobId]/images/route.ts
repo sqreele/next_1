@@ -23,7 +23,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       method: 'POST',
       headers,
       body: request.body as unknown as BodyInit,
-    });
+      duplex: 'half',
+    } as any);
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '');
