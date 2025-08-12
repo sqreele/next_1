@@ -100,14 +100,63 @@ const styles = StyleSheet.create({
   }
 });
 
+// Safely determine whether a job belongs to a selected property (mirror UI logic)
+function doesJobBelongToProperty(job: Job, selectedProperty: string): boolean {
+  // Direct field
+  if (job.property_id && String(job.property_id) === selectedProperty) return true;
+
+  // Flexible properties array with different shapes
+  if (Array.isArray(job.properties) && job.properties.length > 0) {
+    const hasProperty = job.properties.some((prop: any) => {
+      if (typeof prop === 'string' || typeof prop === 'number') {
+        return String(prop) === selectedProperty;
+      }
+      if (prop && typeof prop === 'object' && 'property_id' in prop) {
+        return String(prop.property_id) === selectedProperty;
+      }
+      if (prop && typeof prop === 'object' && 'id' in prop) {
+        return String(prop.id) === selectedProperty;
+      }
+      if (prop && typeof prop === 'object') {
+        return Object.values(prop).some(
+          (value) => (typeof value === 'string' || typeof value === 'number') && String(value) === selectedProperty
+        );
+      }
+      return false;
+    });
+    if (hasProperty) return true;
+  }
+
+  // Legacy profile_image-based properties shape
+  if (job.profile_image?.properties?.some((prop: any) => String((prop as any).property_id ?? (prop as any).id ?? prop) === selectedProperty)) {
+    return true;
+  }
+
+  return false;
+}
+
+// Only allow safe image URLs (avoid mixed-content/CORS crashes in @react-pdf/renderer)
+function getSafeImageUrl(url?: string): string | undefined {
+  if (!url) return undefined;
+  try {
+    // Allow https absolute URLs
+    const parsed = new URL(url);
+    if (parsed.protocol === 'https:') return url;
+    return undefined;
+  } catch {
+    // Allow same-origin relative URLs
+    if (url.startsWith('/')) return url;
+    return undefined;
+  }
+}
+
 const JobsPDFDocument: React.FC<JobsPDFDocumentProps> = ({ jobs, filter, selectedProperty, propertyName }) => {
   const filteredJobs = jobs.filter((job) => {
     if (!selectedProperty) return true;
 
-    return job.property_id === selectedProperty ||
-      (job.profile_image?.properties.some(
-        (prop) => String(prop.property_id) === selectedProperty
-      )) || false;
+    return (
+      doesJobBelongToProperty(job, selectedProperty)
+    );
   });
 
   const formatDate = (dateString: string | null) => {
@@ -173,64 +222,67 @@ const JobsPDFDocument: React.FC<JobsPDFDocumentProps> = ({ jobs, filter, selecte
             </View>
           )}
 
-          {jobGroup.map((job) => (
-            <View key={job.job_id} style={styles.jobRow} wrap={false}>
-              <View style={styles.imageColumn}>
-                {job.images && job.images.length > 0 && (
-                  <Image
-                    src={job.images[0].image_url}
-                    style={styles.jobImage}
-                  />
-                )}
-              </View>
+          {jobGroup.map((job) => {
+            const imageUrl = getSafeImageUrl(job.images?.[0]?.image_url);
+            return (
+              <View key={job.job_id} style={styles.jobRow} wrap={false}>
+                <View style={styles.imageColumn}>
+                  {imageUrl && (
+                    <Image
+                      src={imageUrl}
+                      style={styles.jobImage}
+                    />
+                  )}
+                </View>
 
-              <View style={styles.infoColumn}>
-                <Text style={styles.label}>
-                  Location: {job.rooms?.[0]?.name || 'N/A'}
-                </Text>
-                {job.rooms?.[0]?.room_type && (
-                  <Text style={styles.label}>Room: {job.rooms[0].room_type}</Text>
-                )}
-                <Text style={styles.label}>
-                  Topics: {job.topics?.length ? job.topics.map(t => t.title || 'N/A').join(', ') : 'None'}
-                </Text>
-                <Text style={styles.statusBadge}>Status: {job.status.replace('_', ' ')}</Text>
-                <Text style={{
-                  ...styles.priorityBadge,
-                  color: getPriorityColor(job.priority)
-                }}>
-                  Priority: {job.priority}
-                </Text>
-                <Text style={styles.label}>
-                  Staff: {getUserDisplayName(job.user)}
-                </Text>
-              </View>
+                <View style={styles.infoColumn}>
+                  <Text style={styles.label}>
+                    Location: {job.rooms?.[0]?.name || 'N/A'}
+                  </Text>
+                  {job.rooms?.[0]?.room_type && (
+                    <Text style={styles.label}>Room: {job.rooms[0].room_type}</Text>
+                  )}
+                  <Text style={styles.label}>
+                    Topics: {job.topics?.length ? job.topics.map(t => t.title || 'N/A').join(', ') : 'None'}
+                  </Text>
+                  <Text style={styles.statusBadge}>Status: {job.status?.replace('_', ' ') || 'N/A'}</Text>
+                  <Text style={{
+                    ...styles.priorityBadge,
+                    color: getPriorityColor(job.priority as any)
+                  }}>
+                    Priority: {job.priority || 'N/A'}
+                  </Text>
+                  <Text style={styles.label}>
+                    Staff: {getUserDisplayName(job.user)}
+                  </Text>
+                </View>
 
-              <View style={styles.dateColumn}>
-                {job.description && (
-                  <>
-                    <Text style={styles.label}>Description:</Text>
-                    <Text style={styles.truncatedText}>
-                      {truncateText(job.description, 80)}
-                    </Text>
-                  </>
-                )}
-                {job.remarks && (
-                  <>
-                    <Text style={styles.label}>Remarks:</Text>
-                    <Text style={styles.truncatedText}>
-                      {truncateText(job.remarks, 80)}
-                    </Text>
-                  </>
-                )}
-                <Text style={styles.dateText}>Created: {formatDate(job.created_at)}</Text>
-                <Text style={styles.dateText}>Updated: {formatDate(job.updated_at)}</Text>
-                {job.completed_at && (
-                  <Text style={styles.dateText}>Completed: {formatDate(job.completed_at)}</Text>
-                )}
+                <View style={styles.dateColumn}>
+                  {job.description && (
+                    <>
+                      <Text style={styles.label}>Description:</Text>
+                      <Text style={styles.truncatedText}>
+                        {truncateText(job.description, 80)}
+                      </Text>
+                    </>
+                  )}
+                  {job.remarks && (
+                    <>
+                      <Text style={styles.label}>Remarks:</Text>
+                      <Text style={styles.truncatedText}>
+                        {truncateText(job.remarks, 80)}
+                      </Text>
+                    </>
+                  )}
+                  <Text style={styles.dateText}>Created: {formatDate(job.created_at)}</Text>
+                  <Text style={styles.dateText}>Updated: {formatDate(job.updated_at)}</Text>
+                  {job.completed_at && (
+                    <Text style={styles.dateText}>Completed: {formatDate(job.completed_at)}</Text>
+                  )}
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </Page>
       ))}
     </Document>
