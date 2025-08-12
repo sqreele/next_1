@@ -3,27 +3,24 @@ import React from 'react';
 import { Document, Page, Text, View, StyleSheet, Image, Font } from '@react-pdf/renderer';
 import { Job, TabValue, FILTER_TITLES } from '@/app/lib/types';
 
-// ✅ Register Thai font (Sarabun)
-Font.register({
-  family: 'Sarabun',
-  fonts: [
-    { src: '/fonts/Sarabun-Regular.ttf', fontWeight: 'normal' },
-    { src: '/fonts/Sarabun-Bold.ttf', fontWeight: 'bold' },
-  ],
-});
+// Track whether Sarabun has been registered to avoid duplicate registrations
+let sarabunRegistered = false;
 
 interface JobsPDFDocumentProps {
   jobs: Job[];
   filter: TabValue;
   selectedProperty?: string | null;
   propertyName?: string;
+  // New: allow disabling custom fonts and images for safer generation
+  useCustomFont?: boolean;
+  disableImages?: boolean;
 }
 
 const styles = StyleSheet.create({
   page: {
     padding: 20,
     backgroundColor: '#ffffff',
-    fontFamily: 'Sarabun',
+    // fontFamily will be applied dynamically to support fallback fonts
   },
   header: {
     marginBottom: 15,
@@ -112,10 +109,10 @@ function doesJobBelongToProperty(job: Job, selectedProperty: string): boolean {
         return String(prop) === selectedProperty;
       }
       if (prop && typeof prop === 'object' && 'property_id' in prop) {
-        return String(prop.property_id) === selectedProperty;
+        return String((prop as any).property_id) === selectedProperty;
       }
       if (prop && typeof prop === 'object' && 'id' in prop) {
-        return String(prop.id) === selectedProperty;
+        return String((prop as any).id) === selectedProperty;
       }
       if (prop && typeof prop === 'object') {
         return Object.values(prop).some(
@@ -150,7 +147,28 @@ function getSafeImageUrl(url?: string): string | undefined {
   }
 }
 
-const JobsPDFDocument: React.FC<JobsPDFDocumentProps> = ({ jobs, filter, selectedProperty, propertyName }) => {
+const JobsPDFDocument: React.FC<JobsPDFDocumentProps> = ({ jobs, filter, selectedProperty, propertyName, useCustomFont = true, disableImages = false }) => {
+  // Register Sarabun font only when explicitly requested
+  if (useCustomFont && !sarabunRegistered) {
+    try {
+      Font.register({
+        family: 'Sarabun',
+        fonts: [
+          { src: '/fonts/Sarabun-Regular.ttf', fontWeight: 'normal' },
+          { src: '/fonts/Sarabun-Bold.ttf', fontWeight: 'bold' },
+        ],
+      });
+      sarabunRegistered = true;
+    } catch (err) {
+      // If registration fails, continue with default fonts
+      // eslint-disable-next-line no-console
+      console.warn('[JobsPDF] Failed to register custom font. Falling back to default font.', err);
+      // Ensure we do not retry endlessly
+      sarabunRegistered = true;
+      useCustomFont = false;
+    }
+  }
+
   const filteredJobs = jobs.filter((job) => {
     if (!selectedProperty) return true;
 
@@ -197,7 +215,7 @@ const JobsPDFDocument: React.FC<JobsPDFDocumentProps> = ({ jobs, filter, selecte
 
   // แบ่ง jobs เป็นกลุมๆ เพื่อป้องกันการตกหน้า
   const jobsPerPage = 8; // จำนวน jobs ต่อหน้า
-  const pageGroups = [];
+  const pageGroups = [] as Job[][];
   for (let i = 0; i < filteredJobs.length; i += jobsPerPage) {
     pageGroups.push(filteredJobs.slice(i, i + jobsPerPage));
   }
@@ -205,7 +223,7 @@ const JobsPDFDocument: React.FC<JobsPDFDocumentProps> = ({ jobs, filter, selecte
   return (
     <Document>
       {pageGroups.map((jobGroup, pageIndex) => (
-        <Page key={pageIndex} size="A4" style={styles.page}>
+        <Page key={pageIndex} size="A4" style={[styles.page, { fontFamily: useCustomFont ? 'Sarabun' : 'Helvetica' }]}> 
           {/* แสดง header เฉพาะหน้าแรก */}
           {pageIndex === 0 && (
             <View style={styles.header}>
@@ -227,7 +245,7 @@ const JobsPDFDocument: React.FC<JobsPDFDocumentProps> = ({ jobs, filter, selecte
             return (
               <View key={job.job_id} style={styles.jobRow} wrap={false}>
                 <View style={styles.imageColumn}>
-                  {imageUrl && (
+                  {!disableImages && imageUrl && (
                     <Image
                       src={imageUrl}
                       style={styles.jobImage}
@@ -247,7 +265,7 @@ const JobsPDFDocument: React.FC<JobsPDFDocumentProps> = ({ jobs, filter, selecte
                   </Text>
                   <Text style={styles.statusBadge}>Status: {job.status?.replace('_', ' ') || 'N/A'}</Text>
                   <Text style={{
-                    ...styles.priorityBadge,
+                    ...styles.priorityBadge as any,
                     color: getPriorityColor(job.priority as any)
                   }}>
                     Priority: {job.priority || 'N/A'}

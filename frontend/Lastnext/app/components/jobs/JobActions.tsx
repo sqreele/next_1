@@ -143,18 +143,37 @@ export default function JobActions({
       setIsGenerating(true);
       const propertyName = getPropertyName(selectedProperty);
 
-      const blob = await pdf(
-        <JobsPDFDocument
-          jobs={jobs}
-          filter={currentTab}
-          selectedProperty={selectedProperty}
-          propertyName={propertyName}
-        />
-      ).toBlob();
+      // Attempt 1: full features (custom font + images)
+      const renderWithOptions = async (options?: { useCustomFont?: boolean; disableImages?: boolean }) => {
+        return await pdf(
+          <JobsPDFDocument
+            jobs={jobs}
+            filter={currentTab}
+            selectedProperty={selectedProperty}
+            propertyName={propertyName}
+            useCustomFont={options?.useCustomFont}
+            disableImages={options?.disableImages}
+          />
+        ).toBlob();
+      };
+
+      let blob: Blob | null = null;
+      try {
+        blob = await renderWithOptions({ useCustomFont: true, disableImages: false });
+      } catch (errFirst) {
+        console.warn('[PDF] First attempt failed, retrying without custom font...', errFirst);
+        try {
+          blob = await renderWithOptions({ useCustomFont: false, disableImages: false });
+        } catch (errSecond) {
+          console.warn('[PDF] Second attempt failed, retrying with images disabled...', errSecond);
+          // Last resort: disable images as they can cause fetch/CORS failures inside @react-pdf/renderer
+          blob = await renderWithOptions({ useCustomFont: false, disableImages: true });
+        }
+      }
 
       const date = format(new Date(), "yyyy-MM-dd");
       const filename = `jobs-report-${date}.pdf`;
-      saveAs(blob, filename);
+      saveAs(blob!, filename);
     } catch (error) {
       console.error("Error generating PDF:", error);
       alert("Failed to generate PDF. Please try again later.");
