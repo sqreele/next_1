@@ -265,7 +265,7 @@ export default function JobList({ jobs, filter, properties, selectedRoom, onRoom
       <div className="space-y-4">
         <div className="flex justify-end mb-2">
           <JobActions
-            jobs={jobs}
+            jobs={sortedJobs}
             currentTab={filter}
             properties={properties}
             onRefresh={handleRefresh}

@@ -160,60 +160,7 @@ export default function JobActions({
     }
   };
 
-  const filteredJobsCount = jobs.filter((job) => {
-    // Property filtering
-    if (selectedProperty) {
-      if (!job.properties || !Array.isArray(job.properties) || job.properties.length === 0) {
-        return false;
-      }
-
-      const hasProperty = job.properties.some((prop: any) => {
-        if (typeof prop === "string" || typeof prop === "number") {
-          return String(prop) === selectedProperty;
-        }
-        if (prop && typeof prop === "object" && "property_id" in prop) {
-          return String(prop.property_id) === selectedProperty;
-        }
-        if (prop && typeof prop === "object" && "id" in prop) {
-          return String(prop.id) === selectedProperty;
-        }
-        if (prop && typeof prop === "object") {
-          return Object.values(prop).some(
-            (value) =>
-              (typeof value === "string" || typeof value === "number") &&
-              String(value) === selectedProperty
-          );
-        }
-        return false;
-      });
-
-      if (!hasProperty) return false;
-    }
-
-    // Room filtering
-    if (currentRoomFilter) {
-      if (!job.rooms || !Array.isArray(job.rooms) || job.rooms.length === 0) {
-        return false;
-      }
-
-      const hasRoom = job.rooms.some((room: any) => {
-        if (typeof room === "string" || typeof room === "number") {
-          return String(room) === currentRoomFilter;
-        }
-        if (room && typeof room === "object" && "room_id" in room) {
-          return String(room.room_id) === currentRoomFilter;
-        }
-        if (room && typeof room === "object" && "id" in room) {
-          return String(room.id) === currentRoomFilter;
-        }
-        return false;
-      });
-
-      if (!hasRoom) return false;
-    }
-
-    return true;
-  }).length;
+  const exportCount = jobs.length;
 
   const menuItemClass = "flex items-center gap-2 px-3 py-2 text-sm text-zinc-100 hover:bg-zinc-800 hover:text-white cursor-pointer";
   const menuLabelClass = "text-xs font-semibold text-zinc-400 px-3 py-1.5";
@@ -344,11 +291,11 @@ export default function JobActions({
           variant="outline"
           size="sm"
           onClick={handleGeneratePDF}
-          disabled={isGenerating}
+          disabled={isGenerating || exportCount === 0}
           className={buttonClass}
         >
           <FileDown className="h-4 w-4" />
-          {isGenerating ? "Generating..." : `Export (${filteredJobsCount || 0})`}
+          {isGenerating ? "Generating..." : `Export (${exportCount})`}
         </Button>
 
         <CreateJobButton onJobCreated={handleRefresh} propertyId={selectedProperty ?? ""} />
@@ -435,9 +382,9 @@ export default function JobActions({
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-zinc-800 my-1" />
 
-            <DropdownMenuItem onClick={handleGeneratePDF} disabled={isGenerating} className={menuItemClass}>
+            <DropdownMenuItem onClick={handleGeneratePDF} disabled={isGenerating || exportCount === 0} className={menuItemClass}>
               <FileDown className="h-4 w-4" />
-              {isGenerating ? "Generating..." : `Export PDF (${filteredJobsCount || 0})`}
+              {isGenerating ? "Generating..." : `Export PDF (${exportCount})`}
             </DropdownMenuItem>
             <DropdownMenuSeparator className="bg-zinc-800 my-1" />
 
