@@ -16,7 +16,7 @@ import RoomAutocomplete from '@/app/components/jobs/RoomAutocomplete';
 import FileUpload from '@/app/components/jobs/FileUpload';
 import { Room, TopicFromAPI } from '@/app/lib/types';
 import { useRouter } from 'next/navigation';
-import { useProperty } from '@/app/lib/PropertyContext';
+import { useUser } from '@/app/lib/user-context';
 import { useJob } from '@/app/lib/JobContext';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -84,13 +84,14 @@ const CreateJobForm: React.FC<{ onJobCreated?: () => void }> = ({ onJobCreated }
   const { data: session, status } = useSession();
   const router = useRouter();
   const { triggerJobCreation } = useJob();
-  const { selectedProperty, userProperties } = useProperty();
+  const { selectedProperty, userProfile } = useUser();
 
   const getPropertyName = useCallback((propertyId: string | null): string => {
     if (!propertyId) return 'No Property Selected';
-    const property = userProperties.find(p => p.property_id === propertyId);
+    const properties = userProfile?.properties ?? [];
+    const property = properties.find(p => p.property_id === propertyId);
     return property?.name || `Property ${propertyId}`;
-  }, [userProperties]);
+  }, [userProfile?.properties]);
 
   const fetchData = useCallback(async () => {
     if (!session?.user?.accessToken) return;
