@@ -45,15 +45,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const propertyId = searchParams.get('property');
     
-    if (!propertyId) {
-      return NextResponse.json({ error: 'Property ID is required' }, { status: 400 });
-    }
-
     // ✅ Use the config for API URL construction
-    const apiUrl = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.rooms}?property=${propertyId}`;
+    const apiUrl = propertyId
+      ? `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.rooms}?property=${encodeURIComponent(propertyId)}`
+      : `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.rooms}`;
     
     if (DEBUG_CONFIG.logApiCalls) {
-      console.log('🔍 Calling Django API:', apiUrl);
+      console.log('🔍 Calling Django API:', apiUrl, propertyId ? `(filtered by property ${propertyId})` : '(no property filter)');
       console.log('🔍 With token length:', session.user.accessToken.length);
     }
 
