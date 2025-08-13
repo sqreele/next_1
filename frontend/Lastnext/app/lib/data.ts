@@ -88,14 +88,9 @@ export const uploadJobImage = async (jobId: string, imageFile: File): Promise<{ 
   formData.append('job_id', jobId); // Does the backend need job_id in form data? Check API spec.
 
   try {
-    // Assuming apiClient is an Axios instance configured for auth
-    const response = await apiClient.post(`/api/jobs/${jobId}/images/`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        // Auth header should be added by apiClient interceptor
-      },
-    });
-    return response.data ?? { image_url: '' }; // Return empty string if no URL
+    // Let axios/browser set multipart boundary automatically; auth is handled by interceptors
+    const response = await apiClient.post(`/api/jobs/${jobId}/images/`, formData);
+    return response.data ?? { image_url: '' };
   } catch (error) {
     throw handleApiError(error);
   }
