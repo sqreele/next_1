@@ -39,7 +39,6 @@ const apiClient: AxiosInstance = axios.create({
   baseURL: "", // Use relative URLs to go through Next.js API routes (/api/*)
   timeout: 30000, // Increased to 30 seconds
   headers: {
-    "Content-Type": "application/json",
     "Accept": "application/json",
   }
 });

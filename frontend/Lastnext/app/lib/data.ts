@@ -80,22 +80,18 @@ export const updateJobStatus = async (jobId: string, status: JobStatus): Promise
   }
 };
 
-export const uploadJobImage = async (jobId: string, imageFile: File): Promise<{ image_url: string }> => {
+export const uploadJobImage = async (
+  jobId: string,
+  imageFile: File
+): Promise<{ images: Array<{ id: number; image_url: string | null; uploaded_by: number | null; uploaded_at: string }> }> => {
   if (!jobId || !imageFile) throw new Error('Job ID and image file are required');
 
   const formData = new FormData();
-  formData.append('image', imageFile);
-  formData.append('job_id', jobId); // Does the backend need job_id in form data? Check API spec.
+  formData.append('images', imageFile);
 
   try {
-    // Assuming apiClient is an Axios instance configured for auth
-    const response = await apiClient.post(`/api/jobs/${jobId}/images/`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        // Auth header should be added by apiClient interceptor
-      },
-    });
-    return response.data ?? { image_url: '' }; // Return empty string if no URL
+    const response = await apiClient.post(`/api/jobs/${jobId}/images/`, formData);
+    return response.data ?? { images: [] };
   } catch (error) {
     throw handleApiError(error);
   }

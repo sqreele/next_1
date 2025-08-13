@@ -3,14 +3,14 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/lib/auth';
 import { API_CONFIG } from '@/app/lib/config';
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ jobId: string }> }) {
+export async function POST(request: NextRequest, context: any) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.accessToken) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { jobId } = await params;
+    const { jobId } = context.params as { jobId: string };
     const apiUrl = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.jobs}${jobId}/images/`;
 
     const contentType = request.headers.get('content-type') || '';
