@@ -30,6 +30,9 @@ urlpatterns = [
     # Authentication endpoints
     path('api/v1/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    # No-slash variants to prevent 301 redirect on POST (which can turn into GET)
+    path('api/v1/token', TokenObtainPairView.as_view(), name='token_obtain_pair_noslash'),
+    path('api/v1/token/refresh', TokenRefreshView.as_view(), name='token_refresh_noslash'),
     path('api/v1/auth/session/', views.CustomSessionView.as_view(), name='auth_session'),
     path('api/v1/auth/_log', views.log_view, name='log_view'),
     path('api/v1/auth/check/', views.auth_check, name='auth_check'),

@@ -84,7 +84,7 @@ async function refreshToken(refreshTokenValue: string): Promise<string | null> {
   try {
     console.log("[Auth] Attempting to refresh access token...");
     // Use relative URL through Next.js proxy to avoid external TLS issues and interceptor loops
-    const response = await fetch(`/api/token/refresh/`, {
+    const response = await fetch(`/api/token/refresh/`, { // Proxied to Django via Next API route
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh: refreshTokenValue }),

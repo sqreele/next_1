@@ -72,7 +72,7 @@ interface PaginatedMaintenanceResponse {
 type MaintenanceApiResponse = PreventiveMaintenance[] | PaginatedMaintenanceResponse;
 
 class PreventiveMaintenanceService {
-  private baseUrl: string = '/api/v1/preventive-maintenance';
+  private baseUrl: string = '/api/preventive-maintenance';
 
   // Helper method to check if an item matches a machine
   private itemMatchesMachine(item: PreventiveMaintenance, machineId: string): boolean {
