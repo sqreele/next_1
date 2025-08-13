@@ -42,7 +42,7 @@ export default function RegisterForm() {
    
     try {
       const response = await axios.post(
-        `/api/auth/register/`,
+        `/api/v1/auth/register/`,
         registrationData,
         {
           headers: {
