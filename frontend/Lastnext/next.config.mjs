@@ -27,7 +27,7 @@ const nextConfig = {
     ignoreDuringBuilds: true, // Remove this once ESLint issues are fixed
   },
   
-  trailingSlash: true, // Optional, depending on your backend
+  trailingSlash: false, // Disable to prevent API route redirects that break NextAuth
   
   env: {
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
