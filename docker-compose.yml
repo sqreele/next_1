@@ -98,10 +98,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # Bind to localhost to prevent external access. Use SSH tunnel for remote access if needed.
     ports:
-      - "5432:5432"  # This exposes the port to the host machine
+      - "127.0.0.1:5432:5432"
     expose:
-      - "5432" 
+      - "5432"
     networks:
       - app-network
 
