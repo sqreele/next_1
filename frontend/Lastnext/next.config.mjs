@@ -27,7 +27,6 @@ const nextConfig = {
     ignoreDuringBuilds: true, // Remove this once ESLint issues are fixed
   },
   
-  trailingSlash: true, // Optional, depending on your backend
   
   env: {
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
