@@ -11,7 +11,8 @@ import { API_CONFIG, AUTH_CONFIG, ERROR_TYPES } from "./config";
 import { decodeToken, validateToken, getTokenExpiryTime } from "./utils/auth-utils";
 import { getErrorMessage } from "./utils/error-utils";
 
-export const authOptions: NextAuthOptions = {
+export type ExtendedNextAuthOptions = NextAuthOptions & { trustHost?: boolean };
+export const authOptions: ExtendedNextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -387,6 +388,7 @@ export const authOptions: NextAuthOptions = {
   
   secret: process.env.NEXTAUTH_SECRET,
   debug: true, // Enable debug temporarily
+  trustHost: true,
 };
 
 export default authOptions;
