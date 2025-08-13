@@ -9,6 +9,7 @@ import './globals.css';
 import { JobProvider } from '@/app/lib/JobContext';
 import { PreventiveMaintenanceProvider } from '@/app/lib/PreventiveContext';
 import { FilterProvider } from '@/app/lib/FilterContext';
+import ChunkErrorReload from '@/app/components/ChunkErrorReload';
 // Initialize Inter font
 const inter = Inter({
   subsets: ['latin'],
@@ -85,6 +86,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans min-h-screen bg-background`}>
+        <ChunkErrorReload />
         <AuthProvider>
           <UserProvider>
             <PropertyProvider>
