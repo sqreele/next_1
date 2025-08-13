@@ -18,8 +18,10 @@ import { Room, TopicFromAPI } from '@/app/lib/types';
 import { useRouter } from 'next/navigation';
 import { useProperty } from '@/app/lib/PropertyContext';
 import { useJob } from '@/app/lib/JobContext';
+import apiClient, { uploadMultipartData } from '@/app/lib/api-client';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Use relative API routes proxied by Next.js/Nginx
+// const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 interface FormValues {
@@ -103,8 +105,8 @@ const CreateJobForm: React.FC<{ onJobCreated?: () => void }> = ({ onJobCreated }
         return;
       }
       const [roomsResponse, topicsResponse] = await Promise.all([
-        axios.get(`${API_BASE_URL}/api/rooms/?property_id=${selectedProperty}`, { headers }),
-        axios.get(`${API_BASE_URL}/api/topics/`, { headers }),
+        apiClient.get<Room[]>(`/api/rooms/?property=${selectedProperty}`),
+        apiClient.get<TopicFromAPI[]>(`/api/topics/`),
       ]);
 
       if (!Array.isArray(roomsResponse.data)) throw new Error('Invalid rooms data');
@@ -194,11 +196,7 @@ const CreateJobForm: React.FC<{ onJobCreated?: () => void }> = ({ onJobCreated }
         formData.append('images', file);
       });
 
-      const response = await axios.post(`${API_BASE_URL}/api/jobs/`, formData, {
-        headers: {
-          Authorization: `Bearer ${session.user.accessToken}`,
-        },
-      });
+      await uploadMultipartData(`/api/jobs/`, formData);
 
       resetForm();
       triggerJobCreation();

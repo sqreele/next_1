@@ -4,8 +4,8 @@
 import React, { useState, useEffect } from 'react';
 import { Formik, Form, Field } from 'formik';
 import * as Yup from 'yup';
+import apiClient, { uploadMultipartData } from '@/app/lib/api-client';
 import axios from 'axios';
-import apiClient from '@/app/lib/api-client';
 import { Button } from "@/app/components/ui/button";
 import { Textarea } from "@/app/components/ui/textarea";
 import { Plus, ChevronDown, ChevronUp, Loader } from "lucide-react";
@@ -31,16 +31,7 @@ import RoomAutocomplete from './RoomAutocomplete';
 import FileUpload from './FileUpload';
 import { Room, TopicFromAPI } from '@/app/lib/types'; // Ensure types path is correct
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-
-// Configure axios instance (consider moving to api-client if not already done)
-const axiosInstance = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
 
 // --- 1. Modify Props Interface ---
 interface CreateJobButtonProps {
@@ -221,12 +212,7 @@ const CreateJobButton: React.FC<CreateJobButtonProps> = ({ propertyId, onJobCrea
       });
 
       // Make the API call using multipart/form-data
-      const response = await axiosInstance.post('/api/jobs/', formData, {
-        headers: {
-          // Content-Type is set automatically by browser for FormData
-          Authorization: `Bearer ${session.user.accessToken}`,
-        },
-      });
+      const response = await uploadMultipartData('/api/jobs/', formData);
 
       console.log('Job created:', response.data);
       setOpen(false); // Close dialog on success

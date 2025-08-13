@@ -4,7 +4,8 @@ import Link from 'next/link';
 import FormField from './FormField';
 import { RegisterFormData, ErrorState,} from '@/app/lib/types';
 import axios from 'axios';
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Use relative URL proxied by Next.js/Nginx
+// const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export default function RegisterForm() { 
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function RegisterForm() {
    
     try {
       const response = await axios.post(
-        `${API_URL}/api/v1/auth/register/`,
+        `/api/auth/register/`,
         registrationData,
         {
           headers: {
