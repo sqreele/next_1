@@ -15,6 +15,7 @@ import { Badge } from "@/app/components/ui/badge";
 import { Button } from "@/app/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useProperty } from "@/app/lib/PropertyContext";
+import MissingImage from "@/app/components/jobs/MissingImage";
 
 interface JobCardProps {
   job: Job;
@@ -152,7 +153,7 @@ export function JobCard({ job, properties = [] }: JobCardProps) {
       </CardHeader>
 
       <CardContent className="flex-grow p-4 space-y-4" onClick={(e) => e.stopPropagation()}>
-        {job.images && job.images.length > 0 && (
+        {job.images && job.images.length > 0 ? (
           <div className="space-y-2">
             <div className="relative w-full aspect-video overflow-hidden rounded-md bg-gray-100">
               <LazyImage
@@ -182,6 +183,10 @@ export function JobCard({ job, properties = [] }: JobCardProps) {
                 ))}
               </div>
             )}
+          </div>
+        ) : (
+          <div className="relative w-full aspect-video overflow-hidden rounded-md">
+            <MissingImage className="w-full h-full" rounded="md" />
           </div>
         )}
 
@@ -233,6 +238,7 @@ export function JobCard({ job, properties = [] }: JobCardProps) {
                     src={job.profile_image.profile_image}
                     alt={typeof job.user === 'object' && job.user ? job.user.username : String(job.user ?? 'Staff')}
                     className="w-full h-full object-cover rounded-full"
+                    rounded="full"
                   />
                 ) : (
                   <div className="w-full h-full bg-gray-100 flex items-center justify-center">

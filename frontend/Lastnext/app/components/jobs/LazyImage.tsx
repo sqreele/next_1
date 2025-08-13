@@ -1,29 +1,41 @@
 'use client';
 import Image from 'next/image';
-import React from 'react';
+import React, { useState, useMemo } from 'react';
+import MissingImage from '@/app/components/jobs/MissingImage';
 
 interface LazyImageProps {
-  src: string;
+  src: string | null | undefined;
   alt: string;
   className?: string;
+  rounded?: 'none' | 'sm' | 'md' | 'lg' | 'xl' | 'full';
 }
 
-export const LazyImage: React.FC<LazyImageProps> = ({ src, alt, className }) => {
-  // Check if this is a URL from our own domain
-  const isOwnDomain = src.includes('pmcs.site');
+export const LazyImage: React.FC<LazyImageProps> = ({ src, alt, className, rounded = 'md' }) => {
+  const [hasError, setHasError] = useState(false);
+
+  const normalizedSrc = useMemo(() => {
+    if (!src || typeof src !== 'string' || src.trim() === '') return null;
+    return src;
+  }, [src]);
+
+  const isOwnDomain = normalizedSrc ? normalizedSrc.includes('pmcs.site') : false;
+
+  if (!normalizedSrc || hasError) {
+    return <MissingImage className={className} rounded={rounded} />;
+  }
   
   return (
     <Image
-      src={src}
+      src={normalizedSrc}
       alt={alt}
       className={className}
-      width={0}  // Required for remote images in Next.js 15
-      height={0} // Required for remote images in Next.js 15
-      sizes="100vw" // Adjust based on layout
-      style={{ width: '100%', height: 'auto' }} // Responsive
+      width={0}
+      height={0}
+      sizes="100vw"
+      style={{ width: '100%', height: 'auto' }}
       loading="lazy"
-      unoptimized={isOwnDomain} // Skip optimization for our own domain
-      onError={() => console.error(`Failed to load image: ${src}`)} // Debug
+      unoptimized={isOwnDomain}
+      onError={() => setHasError(true)}
     />
   );
 };
