@@ -60,7 +60,7 @@ async function getPreventiveMaintenance(pmId: string): Promise<PreventiveMainten
   }
 
   // Use relative URL through Next.js rewrites to hit the backend without external TLS
-  const targetUrl = `/api/v1/preventive-maintenance/${pmId}/`;
+  const targetUrl = `/api/preventive-maintenance/${pmId}/`;
   console.log(`[SERVER_FETCH] Fetching URL: ${targetUrl} with token.`);
 
   try {

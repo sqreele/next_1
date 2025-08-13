@@ -55,11 +55,11 @@ export const useUserStore = create<UserStore>((set, get) => ({
     set({ loading: true });
 
     try {
-      const profileResponse = await fetch(`/api/v1/user-profiles/`, {
+      const profileResponse = await fetch(`/api/user-profiles/`, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          'Accept': 'application/json',
         },
       });
 
@@ -74,11 +74,11 @@ export const useUserStore = create<UserStore>((set, get) => ({
 
       if (!profileData) throw new Error('No profile data found');
 
-      const propertiesResponse = await fetch(`/api/v1/properties/`, {
+      const propertiesResponse = await fetch(`/api/properties/`, {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          'Accept': 'application/json',
         },
       });
 
