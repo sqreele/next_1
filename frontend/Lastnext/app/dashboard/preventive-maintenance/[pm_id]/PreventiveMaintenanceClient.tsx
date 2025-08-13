@@ -83,19 +83,12 @@ export default function PreventiveMaintenanceClient({ maintenanceData }: Prevent
     setError(null);
 
     try {
-      const response = await fetch(`/api/v1/preventive-maintenance/${maintenanceData.pm_id}/complete/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          completed_date: new Date().toISOString()
-        }),
-      });
+      const response = await preventiveMaintenanceService.completePreventiveMaintenance(maintenanceData.pm_id, {
+        completed_date: new Date().toISOString(),
+      } as any);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.message || 'Failed to complete maintenance record');
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to complete maintenance record');
       }
 
       router.refresh();
