@@ -6,7 +6,8 @@ import React, { createContext, useContext, useState, useCallback, useEffect, Dis
 import { useSession } from 'next-auth/react';
 import { type UserProfile, type UserContextType, type Property } from '@/app/lib/types'; // Import Property if needed for profile structure
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+// Use relative URLs proxied by Next.js/Nginx to avoid external TLS issues
+// const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 // Create context with the correct type OR undefined
@@ -42,7 +43,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setError(null); // Clear previous errors
 
     try {
-      const response = await fetch(`${API_URL}/api/v1/user-profiles/me/`, { // Using v1 prefix
+      const response = await fetch(`/api/user-profiles/me/`, {
         // credentials: 'include', // Usually not needed when sending Bearer token
         headers: {
           'Content-Type': 'application/json',

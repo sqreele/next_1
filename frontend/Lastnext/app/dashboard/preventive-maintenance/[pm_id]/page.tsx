@@ -59,9 +59,8 @@ async function getPreventiveMaintenance(pmId: string): Promise<PreventiveMainten
     return null; // Or throw new Error("Authentication required");
   }
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ||
-                 (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "https://pmcs.site");
-  const targetUrl = `${apiUrl}/api/v1/preventive-maintenance/${pmId}/`;
+  // Use relative URL through Next.js rewrites to hit the backend without external TLS
+  const targetUrl = `/api/v1/preventive-maintenance/${pmId}/`;
   console.log(`[SERVER_FETCH] Fetching URL: ${targetUrl} with token.`);
 
   try {

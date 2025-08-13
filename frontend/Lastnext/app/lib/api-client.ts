@@ -83,10 +83,8 @@ const processPendingRequests = (token: string | null): void => {
 async function refreshToken(refreshTokenValue: string): Promise<string | null> {
   try {
     console.log("[Auth] Attempting to refresh access token...");
-    // Use standard fetch or a separate axios instance to avoid interceptor loops
-    const djangoBaseURL = process.env.NEXT_PUBLIC_API_URL ||
-      (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "https://pmcs.site");
-    const response = await fetch(`${djangoBaseURL}/api/v1/token/refresh/`, {
+    // Use relative URL through Next.js proxy to avoid external TLS issues and interceptor loops
+    const response = await fetch(`/api/token/refresh/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh: refreshTokenValue }),
