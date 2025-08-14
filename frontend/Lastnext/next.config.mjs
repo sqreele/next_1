@@ -16,7 +16,7 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true, // Remove this once ESLint issues are fixed
   },
-  trailingSlash: true, // Optional, depending on your backend
+  trailingSlash: false, // Disable to keep NextAuth endpoints working reliably
 };
 
 export default nextConfig;
