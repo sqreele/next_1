@@ -21,7 +21,7 @@ function LoginForm() {
   // Redirect if already logged in
   useEffect(() => {
     if (isAuthenticated) {
-      router.push(ROUTES.dashboard);
+      router.replace(ROUTES.dashboard);
     }
   }, [isAuthenticated, router]);
 
@@ -63,6 +63,7 @@ function LoginForm() {
         username,
         password,
         redirect: false,
+        callbackUrl: ROUTES.dashboard,
       });
 
       if (res?.error) {

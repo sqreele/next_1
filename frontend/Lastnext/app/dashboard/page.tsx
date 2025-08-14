@@ -29,7 +29,7 @@ export default async function DashboardPage() {
   // Check if session exists and has a valid token
   if (!session || !session.user || !session.user.accessToken) {
     console.log('❌ No valid session, redirecting to signin');
-    redirect('/auth/signin');
+    redirect('/auth/signin?error=session_expired');
   }
   
   const accessToken = session.user.accessToken;

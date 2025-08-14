@@ -11,8 +11,9 @@ function createSignInRedirect(req: NextRequest, error?: string): NextResponse {
     signInUrl.searchParams.set('error', error);
   }
   
-  // Preserve the original URL for post-login redirect
-  signInUrl.searchParams.set('callbackUrl', encodeURIComponent(req.url));
+  // Preserve the original URL for post-login redirect (do not double-encode)
+  const originalUrl = req.nextUrl.pathname + (req.nextUrl.search || "");
+  signInUrl.searchParams.set('callbackUrl', originalUrl);
   
   return NextResponse.redirect(signInUrl);
 }
@@ -63,41 +64,29 @@ export default withAuth(
   },
   {
     callbacks: {
-      // More robust authorization check
       authorized: ({ token, req }) => {
-        // Allow access if token exists and is not expired
-        if (!token) {
-          console.log('No token found, denying access');
-          return false;
+        // Never protect auth pages to avoid loops
+        const pathname = req.nextUrl.pathname;
+        if (pathname.startsWith('/auth')) {
+          return true;
         }
-        
-        // Check for token errors
-        if (token.error) {
-          console.log('Token error detected:', token.error);
-          return false;
-        }
-        
-        // Check if access token is expired
-        if (token.accessTokenExpires && Date.now() >= token.accessTokenExpires) {
-          console.log('Access token expired');
-          return false;
-        }
-        
+
+        if (!token) return false;
+        if (token.error) return false;
+        if (token.accessTokenExpires && Date.now() >= token.accessTokenExpires) return false;
         return true;
       },
     },
     pages: {
       signIn: ROUTES.signIn,
-      error: ROUTES.error, // Custom error page
+      error: ROUTES.error,
     },
   }
 );
 
 export const config = {
   matcher: [
-    "/dashboard/:path*",
-    "/profile/:path*",
-    // Add other protected routes as needed
-    "/api/protected/:path*",
-  ]
+    // Exclude Next.js internals, all API routes (incl. NextAuth), and public auth pages
+    '/((?!api|_next/static|_next/image|favicon.ico|auth/(signin|error|register|forgot-password|reset-password)).*)',
+  ],
 };
