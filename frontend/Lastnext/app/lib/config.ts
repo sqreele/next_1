@@ -15,8 +15,8 @@ export const API_CONFIG = {
   
   // ✅ Add all missing endpoints
   endpoints: {
-    token: '/api/v1/token/',
-    tokenRefresh: '/api/v1/token/refresh/',
+    token: '/api/token/',
+    tokenRefresh: '/api/token/refresh/',
     userProfile: '/api/v1/user-profiles/',
     properties: '/api/v1/properties/',
     rooms: '/api/v1/rooms/',
