@@ -164,7 +164,7 @@ const CreateJobButton: React.FC<CreateJobButtonProps> = ({ propertyId, onJobCrea
     if (!session?.user) { /* ... auth check ... */
         setError('Please log in to create a job');
         setOpen(false);
-        await signIn({ callbackUrl: '/auth/signin' }); // Redirect to sign in
+        await signIn(); // Redirect to sign in
         return;
     }
     if (!propertyId) { // Add check for propertyId
@@ -230,7 +230,7 @@ const CreateJobButton: React.FC<CreateJobButtonProps> = ({ propertyId, onJobCrea
   // Handle opening the dialog (check auth first)
   const handleAuthClick = async () => {
     if (status === 'unauthenticated') {
-      await signIn({ callbackUrl: '/auth/signin' }); // Prompt login if not authenticated
+      await signIn(); // Prompt login if not authenticated
       return;
     }
     // If authenticated, just open the dialog
