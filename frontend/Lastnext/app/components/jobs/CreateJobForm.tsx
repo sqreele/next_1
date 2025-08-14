@@ -150,7 +150,7 @@ const CreateJobForm: React.FC<{ onJobCreated?: () => void }> = ({ onJobCreated }
   const handleSubmit = async (values: FormValues, { resetForm, setSubmitting }: { resetForm: () => void; setSubmitting: (isSubmitting: boolean) => void }) => {
     if (!session?.user) {
       setError('Please login first');
-      await signIn();
+      await signIn({ callbackUrl: '/auth/signin' });
       return;
     }
 
@@ -226,7 +226,7 @@ const CreateJobForm: React.FC<{ onJobCreated?: () => void }> = ({ onJobCreated }
     return (
       <div className="text-center p-6 space-y-4">
         <p>Please log in to create a job.</p>
-        <Button onClick={() => signIn()}>Log In</Button>
+        <Button onClick={() => signIn({ callbackUrl: '/auth/signin' })}>Log In</Button>
       </div>
     );
   }
