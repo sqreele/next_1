@@ -180,13 +180,14 @@ export default function ProfileDisplay() {
   const router = useRouter();
   const { userProfile, loading } = useUser();
 
-  if (loading) {
-    return <LoadingSkeleton />;
-  }
+  React.useEffect(() => {
+    if (!loading && !userProfile) {
+      router.replace("/auth/signin");
+    }
+  }, [loading, userProfile, router]);
 
-  if (!userProfile) {
-    router.push("/auth/signin");
-    return null;
+  if (loading || !userProfile) {
+    return <LoadingSkeleton />;
   }
 
   const hasProperties = userProfile.properties && userProfile.properties.length > 0;
