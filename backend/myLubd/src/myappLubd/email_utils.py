@@ -54,7 +54,7 @@ def send_email(to_email: str, subject: str, body: str, from_email: Optional[str]
     """
     # Try Gmail API first
     service = _build_gmail_service()
-    from_addr = from_email or getattr(settings, 'DEFAULT_FROM_EMAIL', 'no-reply@pmcs.site')
+    from_addr = from_email or getattr(settings, 'DEFAULT_FROM_EMAIL', None) or getattr(settings, 'EMAIL_HOST_USER', None) or 'no-reply@pmcs.site'
 
     if service is not None:
         try:

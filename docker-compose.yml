@@ -71,6 +71,20 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - DATABASE_URL=postgresql://${POSTGRES_USER:-mylubd_user}:${POSTGRES_PASSWORD:-Sqreele1234}@db:5432/${POSTGRES_DB:-mylubd_db}?schema=public
+      # --- Email (SMTP/Gmail) configuration ---
+      - EMAIL_HOST=${EMAIL_HOST:-smtp.gmail.com}
+      - EMAIL_PORT=${EMAIL_PORT:-587}
+      - EMAIL_USE_TLS=${EMAIL_USE_TLS:-True}
+      - EMAIL_USE_SSL=${EMAIL_USE_SSL:-False}
+      - EMAIL_HOST_USER=${EMAIL_HOST_USER:-}
+      - EMAIL_HOST_PASSWORD=${EMAIL_HOST_PASSWORD:-}
+      - DEFAULT_FROM_EMAIL=${DEFAULT_FROM_EMAIL:-no-reply@pmcs.site}
+      - SERVER_EMAIL=${SERVER_EMAIL:-${DEFAULT_FROM_EMAIL:-no-reply@pmcs.site}}
+      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-https://pmcs.site}
+      # Optional: Gmail API (preferred path if configured)
+      - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID:-}
+      - GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET:-}
+      - GMAIL_REFRESH_TOKEN=${GMAIL_REFRESH_TOKEN:-}
     healthcheck:
       test: ["CMD", "python", "-c", "import http.client; conn = http.client.HTTPConnection('localhost:8000'); conn.request('GET', '/health/'); response = conn.getresponse(); exit(0 if response.status == 200 else 1)"]
       interval: 30s
