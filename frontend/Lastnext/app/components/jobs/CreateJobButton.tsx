@@ -182,14 +182,15 @@ const CreateJobButton: React.FC<CreateJobButtonProps> = ({ propertyId, onJobCrea
         description: values.description.trim(),
         status: values.status,
         priority: values.priority,
-        room_id: values.room.room_id, // Make sure room_id is valid
-        topic_data: JSON.stringify({ // Send topic details as JSON string
+        room_id: values.room.room_id,
+        topic_data: JSON.stringify({
           title: values.topic.title.trim(),
-          description: values.topic.description?.trim() || '', // Handle potentially missing description
+          description: values.topic.description?.trim() || '',
         }),
-        // Only include remarks if non-empty after trimming
         ...(values.remarks && values.remarks.trim() ? { remarks: values.remarks.trim() } : {}),
         is_defective: values.is_defective,
+        property_id: propertyId,
+        user_id: session.user.id,
       } as Record<string, string | number | boolean>;
 
       // Validate essential IDs before appending
