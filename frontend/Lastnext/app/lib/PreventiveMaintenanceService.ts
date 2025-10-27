@@ -400,9 +400,7 @@ class PreventiveMaintenanceService {
         console.log(`  ${key}: ${value instanceof File ? `${value.name} (${value.size} bytes)` : value}`);
       }
 
-      const createResponse = await apiClient.post<any>(`${this.baseUrl}/`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const createResponse = await apiClient.post<any>(`${this.baseUrl}/`, formData);
 
       const responseData = createResponse.data;
       console.log('Raw API response:', responseData);
@@ -462,9 +460,7 @@ class PreventiveMaintenanceService {
         console.log(`  ${key}: ${value instanceof File ? `${value.name} (${value.size} bytes)` : value}`);
       }
 
-      await apiClient.post(`${this.baseUrl}/${pmId}/upload-images/`, imageFormData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      await apiClient.post(`${this.baseUrl}/${pmId}/upload-images/`, imageFormData);
 
       console.log('Images uploaded successfully');
       return { success: true, data: null, message: 'Images uploaded successfully' };
@@ -545,8 +541,7 @@ class PreventiveMaintenanceService {
 
       const response = await apiClient.put<PreventiveMaintenance>(
         `${this.baseUrl}/${id}/`,
-        formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        formData
       );
 
       return { success: true, data: response.data, message: 'Maintenance updated successfully' };
@@ -586,8 +581,7 @@ class PreventiveMaintenanceService {
 
       const response = await apiClient.post<PreventiveMaintenance>(
         `${this.baseUrl}/${id}/complete/`,
-        formData,
-        { headers: { 'Content-Type': 'multipart/form-data' } }
+        formData
       );
 
       return { success: true, data: response.data, message: 'Maintenance completed successfully' };

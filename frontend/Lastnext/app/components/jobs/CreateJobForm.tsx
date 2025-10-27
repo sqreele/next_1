@@ -144,6 +144,9 @@ const CreateJobForm: React.FC<{ onJobCreated?: () => void }> = ({ onJobCreated }
       if (!file.type.startsWith('image/')) return `File "${file.name}" is not an image`;
       if (file.size > MAX_FILE_SIZE) return `File "${file.name}" exceeds 5MB limit`;
     }
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+    const maxTotalBytes = 9.5 * 1024 * 1024; // Keep under Nginx/Django 10MB limits
+    if (totalSize > maxTotalBytes) return 'Total images size exceeds 9.5MB. Please upload fewer or smaller images.';
     return null;
   };
 
@@ -188,8 +191,6 @@ const CreateJobForm: React.FC<{ onJobCreated?: () => void }> = ({ onJobCreated }
       if (values.remarks?.trim()) {
         formData.append('remarks', values.remarks.trim());
       }
-      formData.append('user_id', session.user.id);
-      formData.append('property_id', selectedProperty);
       formData.append('is_defective', values.is_defective ? 'true' : 'false');
       formData.append('is_preventivemaintenance', values.is_preventivemaintenance ? 'true' : 'false');
       values.files.forEach(file => {
