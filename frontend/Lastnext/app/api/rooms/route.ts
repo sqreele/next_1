@@ -28,8 +28,14 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    if (!session?.user?.accessToken) {
-      console.log('❌ No access token in rooms API session');
+    // Prefer incoming Authorization header (set by client with refreshed token), fallback to session token
+    const incomingAuthHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+    const effectiveAuthHeader = incomingAuthHeader && incomingAuthHeader.toLowerCase().startsWith('bearer ')
+      ? incomingAuthHeader
+      : (session?.user?.accessToken ? `Bearer ${session.user.accessToken}` : null);
+
+    if (!effectiveAuthHeader) {
+      console.log('❌ No access token available for rooms API (no header and no session token)');
       return NextResponse.json({ 
         error: 'Unauthorized',
         debug: DEBUG_CONFIG.logSessions ? {
@@ -52,13 +58,13 @@ export async function GET(request: NextRequest) {
     
     if (DEBUG_CONFIG.logApiCalls) {
       console.log('🔍 Calling Django API:', apiUrl, propertyId ? `(filtered by property ${propertyId})` : '(no property filter)');
-      console.log('🔍 With token length:', session.user.accessToken.length);
+      console.log('🔍 Using auth header from:', incomingAuthHeader ? 'incoming request' : 'server session');
     }
 
     // Fetch rooms from the external API
     const response = await fetch(apiUrl, {
       headers: {
-        'Authorization': `Bearer ${session.user.accessToken}`,
+        'Authorization': effectiveAuthHeader,
         'Content-Type': 'application/json',
         'User-Agent': 'NextJS-Server/1.0',
       },
